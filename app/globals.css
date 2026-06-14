@@ -1,26 +1,228 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ------------------------------------------------------------------ */
+/*  MonkeGram design tokens — SMB palette + PS1 / Y2K pixel aesthetic  */
+/* ------------------------------------------------------------------ */
+@theme {
+  /* SMB color palette */
+  --color-banana: #f5c842;
+  --color-jungle: #2d6a4f;
+  --color-pixelblue: #1a3a5c;
+  --color-brown: #7b4f2e;
+  --color-cream: #f0ead6;
+  --color-pixelred: #c0392b;
+  --color-screen: #0a0a0a;
+  --color-grid: #1e1e1e;
+
+  /* Fonts — wired from next/font CSS variables (set in layout.tsx) */
+  --font-display: var(--font-press-start), monospace;
+  --font-body: var(--font-vt323), monospace;
+
+  /* Chunky pixel radius scale (intentionally zero) */
+  --radius-pixel: 0px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ------------------------------------------------------------------ */
+/*  Base                                                              */
+/* ------------------------------------------------------------------ */
+html,
+body {
+  background-color: var(--color-screen);
+  color: var(--color-cream);
+  font-family: var(--font-body);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+/* Bigger base size for the readable VT323 body font */
+:root {
+  font-size: 18px;
+}
+
+/* Pixel-perfect focus ring */
+*:focus-visible {
+  outline: 3px solid var(--color-banana);
+  outline-offset: 2px;
+}
+
+/* Crisp upscaling for pixel NFT art */
+.pixelated {
+  image-rendering: pixelated;
+}
+
+/* ------------------------------------------------------------------ */
+/*  CRT scanline + flicker overlay                                    */
+/* ------------------------------------------------------------------ */
+.crt-overlay {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  mix-blend-mode: overlay;
+}
+
+.crt-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0px,
+    rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, 0.28) 3px,
+    rgba(0, 0, 0, 0.28) 4px
+  );
+}
+
+.crt-overlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0) 60%,
+    rgba(0, 0, 0, 0.45) 100%
+  );
+  animation: crt-flicker 5s infinite steps(60);
+}
+
+@keyframes crt-flicker {
+  0%,
+  97%,
+  100% {
+    opacity: 1;
+  }
+  98% {
+    opacity: 0.82;
+  }
+  99% {
+    opacity: 0.95;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Pixel utilities                                                   */
+/* ------------------------------------------------------------------ */
+
+/* Hard stepped shadow — the "chunky" PS1 look */
+.pixel-border {
+  border: 3px solid var(--color-cream);
+  box-shadow: 4px 4px 0 0 rgba(0, 0, 0, 0.6);
+}
+
+.pixel-border-banana {
+  border: 3px solid var(--color-banana);
+  box-shadow: 4px 4px 0 0 rgba(0, 0, 0, 0.6);
+}
+
+/* Blinking block cursor */
+.blink {
+  animation: blink 1s steps(2, start) infinite;
+}
+
+@keyframes blink {
+  to {
+    opacity: 0;
+  }
+}
+
+/* Dithered shimmer for skeleton loaders */
+.dither-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--color-grid) 0%,
+    var(--color-grid) 40%,
+    #2a2a2a 50%,
+    var(--color-grid) 60%,
+    var(--color-grid) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* Pixel-stepped pulse for the record ring */
+@keyframes record-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--color-pixelred);
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(192, 57, 43, 0);
+    opacity: 0.7;
+  }
+}
+
+.record-pulse {
+  animation: record-pulse 1s steps(8) infinite;
+}
+
+/* Custom range slider — pixel style */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 8px;
+  background: var(--color-grid);
+  border: 2px solid var(--color-cream);
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  background: var(--color-banana);
+  border: 2px solid var(--color-screen);
+  cursor: pointer;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: var(--color-banana);
+  border: 2px solid var(--color-screen);
+  border-radius: 0;
+  cursor: pointer;
+}
+
+/* Per-navigation "power-on" transition (see app/template.tsx) */
+.power-on {
+  animation: power-on 0.28s steps(6) both;
+}
+
+@keyframes power-on {
+  0% {
+    opacity: 0;
+    transform: scaleY(0.6);
+    filter: brightness(2.5);
+  }
+  60% {
+    opacity: 1;
+    transform: scaleY(1.02);
+    filter: brightness(1.4);
+  }
+  100% {
+    opacity: 1;
+    transform: scaleY(1);
+    filter: brightness(1);
+  }
+}
+
+/* Hide scrollbars but keep scrolling */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
