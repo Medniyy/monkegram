@@ -1,6 +1,6 @@
 "use client";
 
-import { FlipHorizontal2 } from "lucide-react";
+import { FlipHorizontal2, Mic, MicOff } from "lucide-react";
 import { useAppStore, type BlendMode } from "@/store/useAppStore";
 
 const BLENDS: { id: BlendMode; label: string }[] = [
@@ -13,6 +13,8 @@ const BLENDS: { id: BlendMode; label: string }[] = [
 export function MaskControls() {
   const mask = useAppStore((s) => s.mask);
   const setMask = useAppStore((s) => s.setMask);
+  const audioEnabled = useAppStore((s) => s.audioEnabled);
+  const setAudioEnabled = useAppStore((s) => s.setAudioEnabled);
 
   return (
     <div className="flex flex-col gap-4">
@@ -73,6 +75,28 @@ export function MaskControls() {
             }`}
           >
             <FlipHorizontal2 size={22} strokeWidth={2.5} />
+          </button>
+        </div>
+
+        {/* Mic */}
+        <div>
+          <p className="font-[family-name:var(--font-display)] text-[9px] text-cream/50 mb-1">
+            MIC
+          </p>
+          <button
+            onClick={() => setAudioEnabled(!audioEnabled)}
+            aria-pressed={audioEnabled}
+            className={`p-2 border-[2px] transition-colors ${
+              audioEnabled
+                ? "bg-banana text-screen border-banana"
+                : "bg-grid text-cream/60 border-cream/30"
+            }`}
+          >
+            {audioEnabled ? (
+              <Mic size={22} strokeWidth={2.5} />
+            ) : (
+              <MicOff size={22} strokeWidth={2.5} />
+            )}
           </button>
         </div>
       </div>

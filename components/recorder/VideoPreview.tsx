@@ -12,7 +12,6 @@ export function VideoPreview({ url, className = "" }: VideoPreviewProps) {
       src={url}
       autoPlay
       loop
-      muted
       playsInline
       controls
       className={`w-full h-full object-contain bg-screen ${className}`}

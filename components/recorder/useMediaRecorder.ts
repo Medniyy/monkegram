@@ -1,6 +1,7 @@
 "use client";
 
 import { RefObject, useCallback, useEffect, useRef, useState } from "react";
+import { useAppStore } from "@/store/useAppStore";
 
 export const MAX_SECONDS = 60;
 
@@ -35,6 +36,7 @@ export function useMediaRecorder(
 ) {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
+  const micStreamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -42,6 +44,11 @@ export function useMediaRecorder(
   const [elapsed, setElapsed] = useState(0);
   const [result, setResult] = useState<RecordingResult | null>(null);
   const [supported] = useState(() => pickMimeType() !== null);
+
+  const stopMic = useCallback(() => {
+    micStreamRef.current?.getTracks().forEach((t) => t.stop());
+    micStreamRef.current = null;
+  }, []);
 
   const clearTimers = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -56,7 +63,7 @@ export function useMediaRecorder(
     clearTimers();
   }, [clearTimers]);
 
-  const start = useCallback(() => {
+  const start = useCallback(async () => {
     const canvas = canvasRef.current;
     const mimeType = pickMimeType();
     if (!canvas || !mimeType) return;
@@ -67,7 +74,22 @@ export function useMediaRecorder(
       return null;
     });
 
-    const stream = canvas.captureStream(30);
+    const canvasStream = canvas.captureStream(30);
+    const tracks: MediaStreamTrack[] = [...canvasStream.getVideoTracks()];
+
+    // Mix in microphone audio when enabled. If the mic is blocked or missing,
+    // fall back to a silent (video-only) recording rather than failing.
+    if (useAppStore.getState().audioEnabled) {
+      try {
+        const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+        micStreamRef.current = mic;
+        tracks.push(...mic.getAudioTracks());
+      } catch {
+        micStreamRef.current = null;
+      }
+    }
+
+    const stream = new MediaStream(tracks);
     const recorder = new MediaRecorder(stream, { mimeType });
     chunksRef.current = [];
 
@@ -80,6 +102,7 @@ export function useMediaRecorder(
       const url = URL.createObjectURL(blob);
       setResult({ blob, url, ext });
       setIsRecording(false);
+      stopMic();
     };
 
     recorder.start();
@@ -92,7 +115,7 @@ export function useMediaRecorder(
       setElapsed((Date.now() - startedAt) / 1000);
     }, 100);
     stopTimeoutRef.current = setTimeout(stop, MAX_SECONDS * 1000);
-  }, [canvasRef, stop]);
+  }, [canvasRef, stop, stopMic]);
 
   const reset = useCallback(() => {
     setResult((prev) => {
@@ -107,8 +130,9 @@ export function useMediaRecorder(
       clearTimers();
       const rec = recorderRef.current;
       if (rec && rec.state !== "inactive") rec.stop();
+      stopMic();
     };
-  }, [clearTimers]);
+  }, [clearTimers, stopMic]);
 
   return { isRecording, elapsed, result, supported, start, stop, reset };
 }

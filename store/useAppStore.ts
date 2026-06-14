@@ -13,9 +13,11 @@ export interface MaskSettings {
 interface AppState {
   selectedNFT: NFT | null;
   mask: MaskSettings;
+  audioEnabled: boolean;
   setSelectedNFT: (nft: NFT | null) => void;
   setMask: (patch: Partial<MaskSettings>) => void;
   resetMask: () => void;
+  setAudioEnabled: (on: boolean) => void;
 }
 
 const DEFAULT_MASK: MaskSettings = {
@@ -28,7 +30,9 @@ const DEFAULT_MASK: MaskSettings = {
 export const useAppStore = create<AppState>((set) => ({
   selectedNFT: null,
   mask: DEFAULT_MASK,
+  audioEnabled: true,
   setSelectedNFT: (nft) => set({ selectedNFT: nft }),
   setMask: (patch) => set((s) => ({ mask: { ...s.mask, ...patch } })),
   resetMask: () => set({ mask: DEFAULT_MASK }),
+  setAudioEnabled: (on) => set({ audioEnabled: on }),
 }));
