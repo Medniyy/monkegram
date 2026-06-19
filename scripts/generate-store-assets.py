@@ -244,7 +244,14 @@ def preview_4(screen: Image.Image, monke: Image.Image) -> None:
     save(img, OUT / "preview-04.png")
 
 
-def banner(monke: Image.Image) -> None:
+def _banner_shadow(img: Image.Image, cut: Image.Image, xy: tuple[int, int]) -> None:
+    shadow = cut.getchannel("A").filter(ImageFilter.GaussianBlur(12))
+    sh = Image.new("RGBA", cut.size, (0, 0, 0, 0))
+    sh.putalpha(shadow.point(lambda a: int(a * 0.5)))
+    img.paste(Image.new("RGBA", cut.size, (2, 8, 6, 255)), (xy[0] + 10, xy[1] + 14), sh)
+
+
+def banner(monke: Image.Image, monke2: Image.Image | None = None) -> None:
     img = Image.new("RGB", (1200, 600), BG)
     draw = ImageDraw.Draw(img, "RGBA")
     draw.rectangle((0, 0, 1200, 600), fill=BG)
@@ -257,9 +264,19 @@ def banner(monke: Image.Image) -> None:
     draw.text((340, 126), "MONKEGRAM", font=font(HEAD, 112), fill=CREAM)
     draw.text((344, 252), "RETURN TO MONKE", font=font(LABEL_BOLD, 31), fill=GOLD)
     draw.text((344, 315), "WEAR  •  RECORD  •  POST TO X", font=font(LABEL, 24), fill=DIM)
-    cut = remove_flat_background(monke).resize((350, 350), Image.Resampling.NEAREST)
-    img.paste(cut, (845, 180), cut)
-    corner_marks(draw, (805, 92, 350, 420))
+    if monke2 is not None:
+        # Two monkes: main one set back-left, the second one front-right.
+        back = remove_flat_background(monke).resize((280, 280), Image.Resampling.NEAREST)
+        front = remove_flat_background(monke2).resize((312, 312), Image.Resampling.NEAREST)
+        _banner_shadow(img, back, (726, 252))
+        img.paste(back, (726, 252), back)
+        _banner_shadow(img, front, (864, 194))
+        img.paste(front, (864, 194), front)
+        corner_marks(draw, (700, 168, 500, 384))
+    else:
+        cut = remove_flat_background(monke).resize((350, 350), Image.Resampling.NEAREST)
+        img.paste(cut, (845, 180), cut)
+        corner_marks(draw, (805, 92, 350, 420))
     add_texture(img, 43)
     save(img, OUT / "banner-1200x600.png")
 
@@ -300,12 +317,16 @@ def save(image: Image.Image, path: Path) -> None:
 
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
-    monke = Image.open(SRC / "smb-1.png").convert("RGB")
+    import os
+    monke_file = os.environ.get("MG_MONKE", "smb-12677.png")
+    monke = Image.open(SRC / monke_file).convert("RGB")
     preview_1()
     preview_2(monke)
     screen = preview_3(monke)
     preview_4(screen, monke)
-    banner(monke)
+    # Banner features two monkes: the main one + a second (Gen3 #4076).
+    second = Image.open(SRC / "smb-4076.png").convert("RGB")
+    banner(monke, second)
     editor_graphic(monke)
     icon()
 

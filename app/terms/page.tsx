@@ -23,6 +23,24 @@ export default function TermsOfUse() {
             do not agree, do not use the app.
           </Section>
 
+          <Section title="NOT AFFILIATED — A COMMUNITY PROJECT">
+            MonkeGram is an independent, fan-made project — created by Solana
+            Monkey Business Gen3 holders (SMB Gen3 #12677 and #4076) as a
+            community contribution, and built for the Solana Seeker. It is not
+            affiliated with, endorsed by, sponsored by,
+            or officially connected to Solana Monkey Business (SMB), MonkeDAO, or
+            the creators, contributors, or holders of those collections. All
+            Solana Monkey Business names, logos, NFT artwork, and related
+            trademarks are the property of their respective owners, and every
+            right to that artwork remains fully with them. MonkeGram only
+            displays publicly available NFT images that you choose to use; it
+            claims no ownership of that artwork and grants you no rights to it.
+            The app is built and offered in good faith as a free gift to the
+            community — it carries no advertising, sells nothing, has no in-app
+            purchases, and does not monetize you or your data. Any rights holder
+            who would like a change or removal can reach us at the email below.
+          </Section>
+
           <Section title="THE SERVICE">
             MonkeGram lets you connect a compatible Solana wallet, select a
             public Solana Monkey Business image, apply it as a live camera

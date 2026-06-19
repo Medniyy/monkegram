@@ -24,6 +24,17 @@ export default function PrivacyPolicy() {
             network, analytics service, database, or video-upload backend.
           </Section>
 
+          <Section title="AN INDEPENDENT, FAN-MADE PROJECT">
+            MonkeGram is an independent community project — made by Solana
+            Monkey Business Gen3 holders (SMB Gen3 #12677 and #4076) and built
+            for the Solana Seeker. It is not affiliated with, endorsed by, or
+            connected to Solana Monkey Business or
+            MonkeDAO. All NFT artwork, names, and related trademarks belong to
+            their respective owners. The tool is offered in good faith, free of
+            charge, with no advertising, no in-app purchases, and no sale of
+            your data.
+          </Section>
+
           <Section title="WALLET CONNECTION">
             The Android app asks you to connect a compatible Solana wallet to
             enter. The wallet may provide your public wallet address and a

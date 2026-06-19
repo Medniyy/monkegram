@@ -3,6 +3,12 @@ import fs from "node:fs";
 const endpoint = process.argv[2] ?? "http://127.0.0.1:9222";
 const outputDir = process.argv[3] ?? "store-submission/source-captures";
 
+// Which monke to feature in the captures. Defaults reproduce the original
+// Gen2 #1 run; override for a specific token, e.g.:
+//   MG_NUMBER=12677 MG_GEN=gen3 node scripts/capture-store-ui.mjs
+const number = process.env.MG_NUMBER ?? "1";
+const gen = (process.env.MG_GEN ?? "gen2").toLowerCase();
+
 const target = await fetch(`${endpoint}/json/new?http://127.0.0.1:3000/monkegram/find/`, {
   method: "PUT",
 }).then((response) => response.json());
@@ -62,16 +68,37 @@ await send("Emulation.setDeviceMetricsOverride", {
   screenWidth: 432,
   screenHeight: 960,
 });
-await wait(4000);
+// Skip the first-visit stories tutorial so it can't cover the finder.
+await evaluate(`localStorage.setItem("monkegram:onboarded","1")`);
+await send("Page.reload");
+await wait(4500);
 
-await evaluate(`(() => {
-  const candidates = [...document.querySelectorAll("button")];
-  const one = candidates.find((button) => button.textContent.trim() === "1");
-  if (!one) throw new Error("Number 1 button not found");
-  one.click();
-  return true;
-})()`);
-await wait(2500);
+// Pick the collection (Gen3 numbers run into 5 digits).
+if (gen === "gen3") {
+  await evaluate(`(() => {
+    const tab = [...document.querySelectorAll('[role="tab"]')]
+      .find((b) => /3/.test(b.textContent));
+    if (!tab) throw new Error("Gen3 toggle not found");
+    tab.click();
+    return true;
+  })()`);
+  await wait(800);
+}
+
+// Type the number digit-by-digit on the numpad (exact-text match avoids the
+// Gen3 toggle, which also contains a "3").
+for (const digit of number.split("")) {
+  await evaluate(`(() => {
+    const key = [...document.querySelectorAll("button")]
+      .find((b) => b.textContent.trim() === ${JSON.stringify(digit)});
+    if (!key) throw new Error("Numpad key not found: " + ${JSON.stringify(digit)});
+    key.click();
+    return true;
+  })()`);
+  await wait(280);
+}
+// Let the NFT data load and the result card render.
+await wait(4000);
 await screenshot("find-result.png");
 
 await evaluate(`(() => {
