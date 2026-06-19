@@ -43,6 +43,16 @@ export function preloadCollection(collection: Collection): void {
   void loadCollection(collection).catch(() => {});
 }
 
+/**
+ * arweave.net (where Gen2 art lives) returns 403 on some networks/regions.
+ * permagate.io is an ar.io gateway that serves the same Arweave tx with
+ * permissive CORS (ACAO:*), so it stays canvas-safe for recording. Gen3 art is
+ * on irys (gateway.irys.xyz) and loads fine, so only arweave.net is rewritten.
+ */
+export function resilientImage(url: string): string {
+  return url.replace(/^https:\/\/arweave\.net\//, "https://permagate.io/");
+}
+
 /** Look up a single token. Returns null if the id doesn't exist. */
 export async function getNFT(
   collection: Collection,
@@ -51,7 +61,7 @@ export async function getNFT(
   const data = await loadCollection(collection);
   const record = data[String(id)];
   if (!record) return null;
-  return { id, collection, ...record };
+  return { id, collection, name: record.name, image: resilientImage(record.image) };
 }
 
 /** How many tokens the loaded collection actually has (for grids). */

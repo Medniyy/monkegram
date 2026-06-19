@@ -20,6 +20,7 @@ export function NFTCard({ nft, onClick }: NFTCardProps) {
           alt={nft.name}
           crossOrigin="anonymous"
           loading="lazy"
+          decoding="async"
           className="w-full h-full object-cover pixelated"
         />
       </div>

@@ -1,23 +1,22 @@
 "use client";
 
-import { FlipHorizontal2, Mic, MicOff } from "lucide-react";
-import { useAppStore, type BlendMode } from "@/store/useAppStore";
+import { FlipHorizontal2, Mic, MicOff, Scissors } from "lucide-react";
+import { useAppStore, VIDEO_QUALITY, type VideoQuality } from "@/store/useAppStore";
 
-const BLENDS: { id: BlendMode; label: string }[] = [
-  { id: "source-over", label: "NORMAL" },
-  { id: "multiply", label: "MULTIPLY" },
-  { id: "screen", label: "SCREEN" },
-];
+const QUALITIES: VideoQuality[] = ["sd", "hd", "full"];
 
-/** Opacity / size / flip / blend controls, wired to the Zustand store. */
-export function MaskControls() {
+/**
+ * Mask fine-tuning that lives behind the gear icon: opacity, size, and
+ * recording quality. (Blend is fixed to Normal — no picker.)
+ */
+export function MaskSettings() {
   const mask = useAppStore((s) => s.mask);
   const setMask = useAppStore((s) => s.setMask);
-  const audioEnabled = useAppStore((s) => s.audioEnabled);
-  const setAudioEnabled = useAppStore((s) => s.setAudioEnabled);
+  const videoQuality = useAppStore((s) => s.videoQuality);
+  const setVideoQuality = useAppStore((s) => s.setVideoQuality);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
       <Slider
         label={`OPACITY · ${Math.round(mask.opacity * 100)}%`}
         min={0}
@@ -31,76 +30,102 @@ export function MaskControls() {
           mask.sizeOffset * 100
         )}%`}
         min={-0.2}
-        max={0.3}
+        max={0.5}
         step={0.01}
         value={mask.sizeOffset}
         onChange={(v) => setMask({ sizeOffset: v })}
       />
 
-      <div className="flex gap-2">
-        {/* Blend mode */}
-        <div className="flex-1">
-          <p className="font-[family-name:var(--font-display)] text-[9px] text-cream/50 mb-1">
-            BLEND
-          </p>
-          <div className="flex">
-            {BLENDS.map((b) => (
-              <button
-                key={b.id}
-                onClick={() => setMask({ blend: b.id })}
-                className={`flex-1 font-[family-name:var(--font-display)] text-[8px] py-2 border-[2px] -ml-[2px] first:ml-0 transition-colors ${
-                  mask.blend === b.id
-                    ? "bg-banana text-screen border-banana z-10"
-                    : "bg-grid text-cream/60 border-cream/30"
-                }`}
-              >
-                {b.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Flip */}
-        <div>
-          <p className="font-[family-name:var(--font-display)] text-[9px] text-cream/50 mb-1">
-            FLIP
-          </p>
-          <button
-            onClick={() => setMask({ flip: !mask.flip })}
-            aria-pressed={mask.flip}
-            className={`p-2 border-[2px] transition-colors ${
-              mask.flip
-                ? "bg-banana text-screen border-banana"
-                : "bg-grid text-cream/60 border-cream/30"
-            }`}
-          >
-            <FlipHorizontal2 size={22} strokeWidth={2.5} />
-          </button>
-        </div>
-
-        {/* Mic */}
-        <div>
-          <p className="font-[family-name:var(--font-display)] text-[9px] text-cream/50 mb-1">
-            MIC
-          </p>
-          <button
-            onClick={() => setAudioEnabled(!audioEnabled)}
-            aria-pressed={audioEnabled}
-            className={`p-2 border-[2px] transition-colors ${
-              audioEnabled
-                ? "bg-banana text-screen border-banana"
-                : "bg-grid text-cream/60 border-cream/30"
-            }`}
-          >
-            {audioEnabled ? (
-              <Mic size={22} strokeWidth={2.5} />
-            ) : (
-              <MicOff size={22} strokeWidth={2.5} />
-            )}
-          </button>
+      <div>
+        <p className="font-[family-name:var(--font-display)] text-[9px] text-cream/50 mb-1">
+          QUALITY
+        </p>
+        <div className="flex">
+          {QUALITIES.map((q) => (
+            <button
+              key={q}
+              onClick={() => setVideoQuality(q)}
+              className={`flex-1 font-[family-name:var(--font-display)] text-[8px] py-2 border-[2px] -ml-[2px] first:ml-0 transition-colors ${
+                videoQuality === q
+                  ? "bg-banana text-screen border-banana z-10"
+                  : "bg-grid text-cream/60 border-cream/30"
+              }`}
+            >
+              {VIDEO_QUALITY[q].label}
+            </button>
+          ))}
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * The toggles used most often, overlaid directly on the camera (camera-app
+ * style): cut background, flip, mic.
+ */
+export function MaskQuickToggles() {
+  const mask = useAppStore((s) => s.mask);
+  const setMask = useAppStore((s) => s.setMask);
+  const audioEnabled = useAppStore((s) => s.audioEnabled);
+  const setAudioEnabled = useAppStore((s) => s.setAudioEnabled);
+
+  return (
+    <>
+      <OverlayToggle
+        active={mask.removeBg}
+        onClick={() => setMask({ removeBg: !mask.removeBg })}
+        label="CUT BG"
+      >
+        <Scissors size={20} strokeWidth={2.5} />
+      </OverlayToggle>
+      <OverlayToggle
+        active={mask.flip}
+        onClick={() => setMask({ flip: !mask.flip })}
+        label="FLIP"
+      >
+        <FlipHorizontal2 size={20} strokeWidth={2.5} />
+      </OverlayToggle>
+      <OverlayToggle
+        active={audioEnabled}
+        onClick={() => setAudioEnabled(!audioEnabled)}
+        label={audioEnabled ? "MIC ON" : "MIC OFF"}
+      >
+        {audioEnabled ? (
+          <Mic size={20} strokeWidth={2.5} />
+        ) : (
+          <MicOff size={20} strokeWidth={2.5} />
+        )}
+      </OverlayToggle>
+    </>
+  );
+}
+
+function OverlayToggle({
+  active,
+  onClick,
+  label,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      aria-label={label}
+      title={label}
+      className={`w-11 h-11 rounded-full border-[2px] flex items-center justify-center backdrop-blur-sm transition-colors active:scale-95 ${
+        active
+          ? "bg-banana text-screen border-banana"
+          : "bg-screen/55 text-cream border-cream/40"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

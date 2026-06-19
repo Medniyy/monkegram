@@ -1,176 +1,86 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Collection, NFT } from "@/lib/types";
-import { getNFT, getNFTs, preloadCollection } from "@/lib/nftData";
-import { addRecent, getRecent } from "@/lib/recentlyViewed";
-import { FEATURED } from "@/lib/featured";
-import { useAppStore } from "@/store/useAppStore";
-import { CollectionToggle } from "@/components/common/CollectionToggle";
-import { SearchBar } from "@/components/search/SearchBar";
-import { NumberPad } from "@/components/search/NumberPad";
-import { NFTPreviewCard } from "@/components/search/NFTPreviewCard";
-import { NFTGrid } from "@/components/gallery/NFTGrid";
-import { BlinkingCursor } from "@/components/ui/BlinkingCursor";
+import { ArrowRight, Play } from "lucide-react";
+import { BrandLogo } from "@/components/ui/BrandLogo";
+import { PixelButton } from "@/components/ui/PixelButton";
+import { StoryTutorial } from "@/components/onboarding/StoryTutorial";
 
-type Status = "idle" | "loading" | "found" | "notfound";
+const ONBOARDED_KEY = "monkegram:onboarded";
 
-export default function Home() {
+/**
+ * The opener. A minimal welcome screen with a single ENTER button, plus the
+ * Instagram-stories tutorial that auto-plays on a first visit (and can be
+ * replayed). Inside the native shell we skip straight to the picker.
+ */
+export default function Welcome() {
   const router = useRouter();
-  const setSelectedNFT = useAppStore((s) => s.setSelectedNFT);
+  const [showTutorial, setShowTutorial] = useState(false);
 
-  const [collection, setCollection] = useState<Collection>("gen2");
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<Status>("idle");
-  const [result, setResult] = useState<NFT | null>(null);
-
-  const [gallery, setGallery] = useState<NFT[]>([]);
-  const [galleryTitle, setGalleryTitle] = useState("FEATURED MONKES");
-  const [galleryLoading, setGalleryLoading] = useState(true);
-
-  // Gen2 and Gen3 number differently (Gen3 ids run into 5 digits), so we
-  // don't hard-cap by a fixed supply — validity is decided by whether the id
-  // exists in the loaded data. MAX_DIGITS just bounds the input length.
-  const MAX_DIGITS = 6;
-
-  // Warm the data cache as soon as a collection is in focus.
+  // First-time visitors (web or inside the native app) get the stories tutorial
+  // automatically. The welcome is the opener everywhere — no auto-skip.
   useEffect(() => {
-    preloadCollection(collection);
-  }, [collection]);
-
-  // Load the gallery once (recently viewed, or featured seed as fallback).
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const recent = getRecent();
-      const refs = recent.length > 0 ? recent : FEATURED;
-      setGalleryTitle(recent.length > 0 ? "RECENTLY WORN" : "FEATURED MONKES");
-      const nfts = await getNFTs(refs);
-      if (!cancelled) {
-        setGallery(nfts);
-        setGalleryLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Debounced lookup whenever the number or collection changes.
-  const lookupRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (lookupRef.current) clearTimeout(lookupRef.current);
-
-    const num = Number(query);
-    if (!query || Number.isNaN(num) || num < 1) {
-      setStatus("idle");
-      setResult(null);
-      return;
+    try {
+      if (!window.localStorage.getItem(ONBOARDED_KEY)) setShowTutorial(true);
+    } catch {
+      /* storage disabled — just skip the auto tutorial */
     }
-
-    setStatus("loading");
-    lookupRef.current = setTimeout(async () => {
-      const nft = await getNFT(collection, num);
-      if (nft) {
-        setResult(nft);
-        setStatus("found");
-      } else {
-        setResult(null);
-        setStatus("notfound");
-      }
-    }, 200);
-
-    return () => {
-      if (lookupRef.current) clearTimeout(lookupRef.current);
-    };
-  }, [query, collection]);
-
-  const handleUse = useCallback(
-    (nft: NFT) => {
-      addRecent({ collection: nft.collection, id: nft.id });
-      setSelectedNFT(nft);
-      router.push("/record");
-    },
-    [router, setSelectedNFT]
-  );
-
-  const handleGallerySelect = useCallback((nft: NFT) => {
-    setCollection(nft.collection);
-    setQuery(String(nft.id));
-    if (typeof window !== "undefined")
-      window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
-  const submit = useCallback(() => {
-    if (status === "found" && result) handleUse(result);
-  }, [status, result, handleUse]);
+  const enter = () => router.push("/find");
+
+  const dismissTutorial = () => {
+    setShowTutorial(false);
+    try {
+      window.localStorage.setItem(ONBOARDED_KEY, "1");
+    } catch {
+      /* non-fatal */
+    }
+  };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 md:px-8 py-8 md:py-12 flex flex-col gap-10">
-      {/* Hero */}
-      <header className="text-center md:text-left">
-        <h1 className="font-[family-name:var(--font-display)] text-banana text-2xl md:text-4xl leading-tight">
-          FIND YOUR MONKE
-        </h1>
-        <p className="text-cream/60 text-xl mt-2">
-          Type your number. Wear it. Record it.
-        </p>
-      </header>
-
-      {/* Search controls */}
-      <div className="flex flex-col items-center gap-6">
-        <CollectionToggle value={collection} onChange={setCollection} />
-
-        {/* Desktop: text input */}
-        <div className="hidden md:block w-full max-w-sm">
-          <SearchBar
-            value={query}
-            onChange={setQuery}
-            onSubmit={submit}
-            maxDigits={MAX_DIGITS}
-          />
-        </div>
-
-        {/* Mobile: big display + numpad */}
-        <div className="md:hidden w-full flex flex-col items-center gap-5">
-          <div className="pixel-border bg-screen w-full max-w-xs text-center py-4">
-            <span className="font-[family-name:var(--font-body)] text-5xl text-cream">
-              {query || <span className="text-cream/30">0000</span>}
-            </span>
-          </div>
-          <NumberPad
-            onDigit={(d) =>
-              setQuery((q) =>
-                (q + d).replace(/^0+(?=\d)/, "").slice(0, MAX_DIGITS)
-              )
-            }
-            onBackspace={() => setQuery((q) => q.slice(0, -1))}
-            onClear={() => setQuery("")}
-          />
-        </div>
-      </div>
-
-      {/* Result */}
-      <div className="min-h-[2rem] flex items-center justify-center">
-        {status === "loading" && <BlinkingCursor label="SEARCHING" />}
-        {status === "notfound" && (
-          <p className="font-[family-name:var(--font-display)] text-pixelred text-xs text-center">
-            [ NO MONKE #{query} IN {collection.toUpperCase()} ]
-          </p>
-        )}
-        {status === "found" && result && (
-          <NFTPreviewCard nft={result} onUse={() => handleUse(result)} />
-        )}
-      </div>
-
-      {/* Gallery */}
-      <NFTGrid
-        title={galleryTitle}
-        nfts={gallery}
-        loading={galleryLoading}
-        onSelect={handleGallerySelect}
+    <main className="relative min-h-dvh flex flex-col items-center justify-center text-center px-6 py-12 overflow-hidden">
+      {/* Soft banana glow behind the mark */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute left-1/2 top-1/3 -translate-x-1/2 -translate-y-1/2 w-[min(80vw,420px)] aspect-square rounded-full opacity-25 blur-3xl"
+        style={{ background: "var(--color-banana)" }}
       />
-    </div>
+
+      <div className="relative flex flex-col items-center gap-6">
+        <BrandLogo size={112} className="power-on" />
+
+        <div>
+          <h1 className="font-[family-name:var(--font-display)] text-banana text-3xl md:text-5xl leading-tight">
+            MONKEGRAM
+          </h1>
+          <p className="text-cream/60 text-xl md:text-2xl mt-3">
+            Return to Monke
+          </p>
+        </div>
+
+        <div className="flex flex-col items-center gap-4 mt-4">
+          <PixelButton
+            size="lg"
+            onClick={enter}
+            className="flex items-center gap-2"
+          >
+            ENTER
+            <ArrowRight size={16} strokeWidth={3} />
+          </PixelButton>
+
+          <button
+            onClick={() => setShowTutorial(true)}
+            className="flex items-center gap-2 font-[family-name:var(--font-display)] text-[10px] text-cream/50 hover:text-banana transition-colors py-2"
+          >
+            <Play size={12} strokeWidth={3} />
+            HOW IT WORKS
+          </button>
+        </div>
+      </div>
+
+      {showTutorial && <StoryTutorial onDone={dismissTutorial} />}
+    </main>
   );
 }

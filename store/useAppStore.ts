@@ -2,37 +2,58 @@ import { create } from "zustand";
 import type { NFT } from "@/lib/types";
 
 export type BlendMode = "source-over" | "multiply" | "screen";
+export type MaskShape = "round" | "square";
 
 export interface MaskSettings {
   opacity: number; // 0..1
-  sizeOffset: number; // -0.2 .. 0.3 (fraction of auto-fit)
+  sizeOffset: number; // -0.5 .. 0.5 (fraction added to the auto-fit scale)
   flip: boolean; // mirror horizontally
   blend: BlendMode;
+  shape: MaskShape; // round (default) softens the sharp square PFP corners
+  removeBg: boolean; // chroma-key the PFP's flat background away
 }
+
+/** Recording quality presets: canvas cap (px) + encoder bitrate (bps). */
+export type VideoQuality = "sd" | "hd" | "full";
+
+export const VIDEO_QUALITY: Record<
+  VideoQuality,
+  { label: string; maxDim: number; bitrate: number }
+> = {
+  sd: { label: "SD", maxDim: 720, bitrate: 2_500_000 },
+  hd: { label: "HD", maxDim: 1280, bitrate: 6_000_000 },
+  full: { label: "FULL", maxDim: 1920, bitrate: 12_000_000 },
+};
 
 interface AppState {
   selectedNFT: NFT | null;
   mask: MaskSettings;
   audioEnabled: boolean;
+  videoQuality: VideoQuality;
   setSelectedNFT: (nft: NFT | null) => void;
   setMask: (patch: Partial<MaskSettings>) => void;
   resetMask: () => void;
   setAudioEnabled: (on: boolean) => void;
+  setVideoQuality: (q: VideoQuality) => void;
 }
 
 const DEFAULT_MASK: MaskSettings = {
-  opacity: 0.9,
-  sizeOffset: 0,
+  opacity: 1, // fully opaque by default
+  sizeOffset: 0.2, // +20% — fills the face well out of the box
   flip: false,
-  blend: "source-over",
+  blend: "source-over", // only Normal is used; no blend picker in the UI
+  shape: "round",
+  removeBg: true, // cut the PFP background by default
 };
 
 export const useAppStore = create<AppState>((set) => ({
   selectedNFT: null,
   mask: DEFAULT_MASK,
   audioEnabled: true,
+  videoQuality: "full",
   setSelectedNFT: (nft) => set({ selectedNFT: nft }),
   setMask: (patch) => set((s) => ({ mask: { ...s.mask, ...patch } })),
   resetMask: () => set({ mask: DEFAULT_MASK }),
   setAudioEnabled: (on) => set({ audioEnabled: on }),
+  setVideoQuality: (q) => set({ videoQuality: q }),
 }));

@@ -24,7 +24,11 @@ export function loadFaceLandmarker(): Promise<FaceLandmarker> {
     return FaceLandmarker.createFromOptions(fileset, {
       baseOptions: {
         modelAssetPath: `${BASE_PATH}/mediapipe/face_landmarker.task`,
-        delegate: "GPU",
+        // CPU (XNNPACK) is the reliable choice across devices and especially
+        // inside a WebView / on emulators where the GPU delegate runs on
+        // software GL and throws every frame (→ "no face detected"). On real
+        // hardware CPU landmarking is still fast enough for a face mask.
+        delegate: "CPU",
       },
       runningMode: "VIDEO",
       numFaces: 1,

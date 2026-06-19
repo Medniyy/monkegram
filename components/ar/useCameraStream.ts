@@ -36,7 +36,15 @@ export function useCameraStream() {
     setStatus("requesting");
     navigator.mediaDevices
       .getUserMedia({
-        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+        // Ask the front camera for as much as it can give (ideal, so it falls
+        // back gracefully on phones that top out lower). The canvas is capped
+        // separately per the selected quality preset.
+        video: {
+          facingMode: "user",
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 30 },
+        },
         audio: false,
       })
       .then((stream) => {

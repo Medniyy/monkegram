@@ -3,7 +3,7 @@
 import { RefObject, useEffect, useRef } from "react";
 import { FaceLandmarker } from "@mediapipe/tasks-vision";
 import { computeFaceBox } from "@/lib/imageUtils";
-import { useAppStore } from "@/store/useAppStore";
+import { useAppStore, VIDEO_QUALITY } from "@/store/useAppStore";
 
 interface FaceMaskCanvasProps {
   videoRef: RefObject<HTMLVideoElement | null>;
@@ -13,8 +13,6 @@ interface FaceMaskCanvasProps {
   onFaceChange?: (detected: boolean) => void;
   className?: string;
 }
-
-const MAX_DIM = 1280;
 
 /**
  * The heart of the app: a requestAnimationFrame loop that draws the camera
@@ -31,7 +29,9 @@ export function FaceMaskCanvas({
 }: FaceMaskCanvasProps) {
   // Live mask settings, read inside the loop via a ref (no loop restarts).
   const mask = useAppStore((s) => s.mask);
+  const videoQuality = useAppStore((s) => s.videoQuality);
   const maskRef = useRef(mask);
+  const qualityRef = useRef(videoQuality);
   const nftRef = useRef(nftImage);
   const faceRef = useRef<boolean | null>(null);
 
@@ -39,6 +39,9 @@ export function FaceMaskCanvas({
   useEffect(() => {
     maskRef.current = mask;
   }, [mask]);
+  useEffect(() => {
+    qualityRef.current = videoQuality;
+  }, [videoQuality]);
   useEffect(() => {
     nftRef.current = nftImage;
   }, [nftImage]);
@@ -56,7 +59,8 @@ export function FaceMaskCanvas({
       const vw = video.videoWidth;
       const vh = video.videoHeight;
       if (vw && vh) {
-        const scale = Math.min(1, MAX_DIM / Math.max(vw, vh));
+        const maxDim = VIDEO_QUALITY[qualityRef.current].maxDim;
+        const scale = Math.min(1, maxDim / Math.max(vw, vh));
         const tw = Math.round(vw * scale);
         const th = Math.round(vh * scale);
         if (canvas.width !== tw || canvas.height !== th) {

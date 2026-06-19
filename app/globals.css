@@ -4,15 +4,17 @@
 /*  MonkeGram design tokens — SMB palette + PS1 / Y2K pixel aesthetic  */
 /* ------------------------------------------------------------------ */
 @theme {
-  /* SMB color palette */
-  --color-banana: #f5c842;
-  --color-jungle: #2d6a4f;
-  --color-pixelblue: #1a3a5c;
+  /* MonkeGram palette — Dark Monke Green + Banana Gold (from the MG logo).
+     Core combo: #0C2A18 (bg) + #FEC133 (gold). */
+  --color-banana: #fec133; /* Banana Gold — primary accent */
+  --color-mutedbanana: #a38729; /* Muted Banana — secondary gold / shadows */
+  --color-jungle: #3aa76a; /* legible jungle-green accent (success) */
+  --color-pixelblue: #103a22; /* elevated green panel (legacy token name) */
   --color-brown: #7b4f2e;
-  --color-cream: #f0ead6;
-  --color-pixelred: #c0392b;
-  --color-screen: #0a0a0a;
-  --color-grid: #1e1e1e;
+  --color-cream: #f0ead6; /* light text, reads on dark green */
+  --color-pixelred: #c0392b; /* record indicator (kept functional-red) */
+  --color-screen: #0c2a18; /* Dark Monke Green — main background */
+  --color-grid: #082617; /* Jungle Shadow — recessed panels / borders */
 
   /* Fonts — wired from next/font CSS variables (set in layout.tsx) */
   --font-display: var(--font-press-start), monospace;
@@ -135,7 +137,7 @@ body {
     90deg,
     var(--color-grid) 0%,
     var(--color-grid) 40%,
-    #2a2a2a 50%,
+    #14492c 50%,
     var(--color-grid) 60%,
     var(--color-grid) 100%
   );
@@ -215,6 +217,16 @@ input[type="range"]::-moz-range-thumb {
     opacity: 1;
     transform: scaleY(1);
     filter: brightness(1);
+  }
+}
+
+/* Story-tutorial progress bar fill (see StoryTutorial.tsx) */
+@keyframes story-fill {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
   }
 }
 

@@ -1,8 +1,9 @@
 import type { NextConfig } from "next";
 
-// Served under ath.camera/monke. Override with NEXT_PUBLIC_BASE_PATH="" to
+// Served from the Medniyy/monkegram GitHub Pages project site. Override with
+// NEXT_PUBLIC_BASE_PATH="" to
 // serve from a domain root instead.
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "/monke";
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "/monkegram";
 
 const nextConfig: NextConfig = {
   // Pure static export — no server, no API routes. Deploys to Cloudflare Pages for free.

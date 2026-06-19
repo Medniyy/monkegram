@@ -1,0 +1,227 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import type { Collection, NFT } from "@/lib/types";
+import { getNFT, getNFTs, preloadCollection } from "@/lib/nftData";
+import { addRecent, getRecent } from "@/lib/recentlyViewed";
+import { FEATURED } from "@/lib/featured";
+import { useBridgedOwned, useBridgedSelected, resolveBridged } from "@/lib/bridge";
+import { useAppStore } from "@/store/useAppStore";
+import { CollectionToggle } from "@/components/common/CollectionToggle";
+import { SearchBar } from "@/components/search/SearchBar";
+import { NumberPad } from "@/components/search/NumberPad";
+import { NFTPreviewCard } from "@/components/search/NFTPreviewCard";
+import { NFTGrid } from "@/components/gallery/NFTGrid";
+import { BlinkingCursor } from "@/components/ui/BlinkingCursor";
+import { BrandLogo } from "@/components/ui/BrandLogo";
+
+type Status = "idle" | "loading" | "found" | "notfound";
+
+export default function Home() {
+  const router = useRouter();
+  const setSelectedNFT = useAppStore((s) => s.setSelectedNFT);
+
+  // Inside the native MonkeGram shell, the wallet's owned monkeys are bridged
+  // in. In that case we show "YOUR MONKES" and hide the manual number search.
+  const bridgedOwned = useBridgedOwned();
+  const shellMode = bridgedOwned !== null;
+
+  // If the user tapped a specific monkey in the native inventory, go straight to
+  // the recorder wearing it (skip the in-web picker).
+  const bridgedSelected = useBridgedSelected();
+  const jumpedRef = useRef(false);
+  useEffect(() => {
+    if (!bridgedSelected || jumpedRef.current) return;
+    jumpedRef.current = true;
+    (async () => {
+      const [nft] = await resolveBridged([bridgedSelected]);
+      if (nft) {
+        setSelectedNFT(nft);
+        router.push("/record");
+      } else {
+        jumpedRef.current = false; // resolution failed — let it retry
+      }
+    })();
+  }, [bridgedSelected, setSelectedNFT, router]);
+
+  const [collection, setCollection] = useState<Collection>("gen2");
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<Status>("idle");
+  const [result, setResult] = useState<NFT | null>(null);
+
+  const [gallery, setGallery] = useState<NFT[]>([]);
+  const [galleryTitle, setGalleryTitle] = useState("FEATURED MONKES");
+  const [galleryLoading, setGalleryLoading] = useState(true);
+
+  // Gen2 and Gen3 number differently (Gen3 ids run into 5 digits), so we
+  // don't hard-cap by a fixed supply — validity is decided by whether the id
+  // exists in the loaded data. MAX_DIGITS just bounds the input length.
+  const MAX_DIGITS = 6;
+
+  // Warm the data cache as soon as a collection is in focus.
+  useEffect(() => {
+    preloadCollection(collection);
+  }, [collection]);
+
+  // Load the gallery once. In shell mode it's the wallet's owned monkeys;
+  // otherwise recently-viewed, or the featured seed as fallback.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (shellMode) {
+        setGalleryTitle("YOUR MONKES");
+        const nfts = await resolveBridged(bridgedOwned ?? []);
+        if (!cancelled) {
+          setGallery(nfts);
+          setGalleryLoading(false);
+        }
+        return;
+      }
+      const recent = getRecent();
+      const refs = recent.length > 0 ? recent : FEATURED;
+      setGalleryTitle(recent.length > 0 ? "RECENTLY WORN" : "FEATURED MONKES");
+      const nfts = await getNFTs(refs);
+      if (!cancelled) {
+        setGallery(nfts);
+        setGalleryLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [shellMode, bridgedOwned]);
+
+  // Debounced lookup whenever the number or collection changes.
+  const lookupRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (lookupRef.current) clearTimeout(lookupRef.current);
+
+    const num = Number(query);
+    if (!query || Number.isNaN(num) || num < 1) {
+      setStatus("idle");
+      setResult(null);
+      return;
+    }
+
+    setStatus("loading");
+    lookupRef.current = setTimeout(async () => {
+      const nft = await getNFT(collection, num);
+      if (nft) {
+        setResult(nft);
+        setStatus("found");
+      } else {
+        setResult(null);
+        setStatus("notfound");
+      }
+    }, 200);
+
+    return () => {
+      if (lookupRef.current) clearTimeout(lookupRef.current);
+    };
+  }, [query, collection]);
+
+  const handleUse = useCallback(
+    (nft: NFT) => {
+      addRecent({ collection: nft.collection, id: nft.id });
+      setSelectedNFT(nft);
+      router.push("/record");
+    },
+    [router, setSelectedNFT]
+  );
+
+  const handleGallerySelect = useCallback((nft: NFT) => {
+    setCollection(nft.collection);
+    setQuery(String(nft.id));
+    if (typeof window !== "undefined")
+      window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  const submit = useCallback(() => {
+    if (status === "found" && result) handleUse(result);
+  }, [status, result, handleUse]);
+
+  return (
+    <div className="max-w-5xl mx-auto px-4 md:px-8 py-8 md:py-12 flex flex-col gap-10">
+      {/* Hero */}
+      <header className="text-center md:text-left">
+        {/* Logo — mobile only (desktop shows it in the sidebar). */}
+        <BrandLogo size={72} className="md:hidden mx-auto mb-4" />
+        <h1 className="font-[family-name:var(--font-display)] text-banana text-2xl md:text-4xl leading-tight">
+          {shellMode ? "PICK YOUR MONKE" : "FIND YOUR MONKE"}
+        </h1>
+        <p className="text-cream/60 text-xl mt-2">
+          {shellMode
+            ? "Tap one you hold — or find any monke by number."
+            : "Type your number. Wear it. Record it."}
+        </p>
+      </header>
+
+      {/* "What's next?" teaser — placeholder copy, edit freely. */}
+      <div className="pixel-border-banana bg-grid px-4 py-3 flex items-center gap-3">
+        <span className="font-[family-name:var(--font-display)] text-banana text-[10px] shrink-0">
+          WHAT&apos;S NEXT?
+        </span>
+        <span className="text-cream/70 text-base leading-snug">
+          More features and integrations are coming soon! Tag @MonkeDAO.
+        </span>
+      </div>
+
+      {/* Pick a monke — by number anywhere; the owned grid is below in the app. */}
+      <>
+          <div className="flex flex-col items-center gap-6">
+            <CollectionToggle value={collection} onChange={setCollection} />
+
+            {/* Desktop: text input */}
+            <div className="hidden md:block w-full max-w-sm">
+              <SearchBar
+                value={query}
+                onChange={setQuery}
+                onSubmit={submit}
+                maxDigits={MAX_DIGITS}
+              />
+            </div>
+
+            {/* Mobile: big display + numpad */}
+            <div className="md:hidden w-full flex flex-col items-center gap-5">
+              <div className="pixel-border bg-screen w-full max-w-xs text-center py-4">
+                <span className="font-[family-name:var(--font-body)] text-5xl text-cream">
+                  {query || <span className="text-cream/30">0000</span>}
+                </span>
+              </div>
+              <NumberPad
+                onDigit={(d) =>
+                  setQuery((q) =>
+                    (q + d).replace(/^0+(?=\d)/, "").slice(0, MAX_DIGITS)
+                  )
+                }
+                onBackspace={() => setQuery((q) => q.slice(0, -1))}
+                onClear={() => setQuery("")}
+              />
+            </div>
+          </div>
+
+          {/* Result */}
+          <div className="min-h-[2rem] flex items-center justify-center">
+            {status === "loading" && <BlinkingCursor label="SEARCHING" />}
+            {status === "notfound" && (
+              <p className="font-[family-name:var(--font-display)] text-pixelred text-xs text-center">
+                [ NO MONKE #{query} IN {collection.toUpperCase()} ]
+              </p>
+            )}
+            {status === "found" && result && (
+              <NFTPreviewCard nft={result} onUse={() => handleUse(result)} />
+            )}
+          </div>
+        </>
+
+      {/* Gallery — owned monkeys in shell mode (tap goes straight to record). */}
+      <NFTGrid
+        title={galleryTitle}
+        nfts={gallery}
+        loading={galleryLoading}
+        onSelect={shellMode ? handleUse : handleGallerySelect}
+      />
+    </div>
+  );
+}

@@ -4,9 +4,12 @@
 
 ---
 
-## 1. Project Brief
+## 1. Original MVP Brief (superseded by the Seeker app)
 
-MonkeGram is a web app for Solana Monkey Business NFT holders (SMB Gen2 & SMB Gen3). Users:
+> This section records the original browser MVP. The current product is one
+> Seeker mobile app; see “Updates since MVP” for the active product model.
+
+The original MonkeGram MVP was a web experience for Solana Monkey Business NFT holders (SMB Gen2 & SMB Gen3). Users:
 
 1. Open the website — no wallet, no login, no account
 2. Type their token number, pick Gen2 or Gen3
@@ -439,4 +442,61 @@ Key landmarks for mask bounding box:
 
 ---
 
-*Last updated: 2026-06-14*
+## Updates since MVP (2026-06-18)
+
+Features added after the original spec above. The stack is unchanged (Next.js 16
+static export, React 19, Tailwind v4, Zustand, MediaPipe Tasks Vision); these are
+additive.
+
+### Routing / entry
+- **Welcome screen** at `/` (`app/page.tsx`): minimal opener — MG logo, **ENTER**
+  → `/find`, and **HOW IT WORKS** to replay the tutorial. `AppShell` renders no
+  sidebar/nav on `/` (full-bleed).
+- The finder ("FIND YOUR MONKE" + numpad/search) moved from `/` to **`/find`**
+  (`app/find/page.tsx`). `/record` unchanged. Nav/links updated accordingly.
+- **Stories tutorial** (`components/onboarding/StoryTutorial.tsx`): IG-stories
+  style (segmented auto-advancing bars, tap to scrub, hold to pause), auto-plays
+  on first visit (localStorage `monkegram:onboarded`). **Context-aware**: in the
+  native app (shell) the first slide is "VERIFY YOUR MONKE / connect your wallet
+  and verify ownership"; on the web it's "FIND YOUR MONKE / type your number".
+  Share slide says "Tag @MonkeDAO".
+
+### PFP background removal (the "wear just the monkey" feature)
+- `lib/removeBackground.ts` — a **zero-dependency chroma-key**: samples the four
+  corners for the flat PFP background colour, then **flood-fills inward from the
+  edges** (so it only clears background connected to the border — never punches
+  holes through matching fur), feathers the edge, and **crops to the subject's
+  bounding box** so the monkey fills the face (returns `null` → caller keeps the
+  original when corners disagree / busy background). Chosen over an ML model
+  (`@imgly`, ~40MB) for the mobile WebView.
+- `components/ar/useCutoutImage.ts` applies it and returns an `<img>` (canvas →
+  dataURL, stays CORS-safe for recording). Toggled by `mask.removeBg` (default on)
+  via the **CUT BG** scissors button in `MaskControls`. Runs only in the recorder,
+  on the PFP — never the camera video.
+
+### Recording quality
+- Camera requested at 1080p (`useCameraStream`). `useMediaRecorder` now applies the
+  selected preset's `videoBitsPerSecond` (SD/HD/FULL = 2.5/6/12 Mbps) + 128 kbps
+  audio, and captures mic at 48 kHz stereo. Default quality **FULL**; a
+  **QUALITY** SD/HD/FULL picker added to `MaskControls`.
+
+### Mobile shell bridge
+- `lib/bridge.ts` — `useBridgedOwned()` / `isInAppShell()` / `resolveBridged()`.
+  When loaded inside the MonkeGram Android app's WebView, the native shell injects
+  `window.__MONKEGRAM_OWNED__` (the wallet's verified-owned monkeys); `/find` then
+  shows "YOUR MONKES" instead of the number search. See the `monkegram-mobile`
+  repo's `docs/07` and `docs/09`.
+
+### Product model + post-record priority
+- **MonkeGram is one Seeker mobile app.** This Next.js static bundle is its
+  embedded post-auth experience/AR engine, not a separate web product.
+- The primary completed-recording action is **POST TO X**. In the Android shell,
+  the clip is streamed locally to native code and opened in the system share
+  sheet with the video attached. **SAVE TO DEVICE** is the secondary action and
+  writes the clip to the video library. No upload backend is involved.
+
+### Branding
+- `components/ui/BrandLogo.tsx` + `mglogo.png`; palette retuned to Dark Monke Green
+  `#0C2A18` + Banana Gold `#FEC133` (token values in `app/globals.css`).
+
+*Last updated: 2026-06-18*

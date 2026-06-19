@@ -43,3 +43,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local release/deployment worktrees
+/.release-monkegram/
+/.release-pages/

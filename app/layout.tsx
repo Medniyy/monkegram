@@ -1,37 +1,45 @@
 import type { Metadata, Viewport } from "next";
-import { Press_Start_2P, VT323 } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { CRTOverlay } from "@/components/ui/CRTOverlay";
 import { AppShell } from "@/components/layout/AppShell";
+import { BASE_PATH } from "@/lib/basePath";
 
-const pressStart = Press_Start_2P({
+const pressStart = localFont({
+  src: "./fonts/PressStart2P-Regular.ttf",
   weight: "400",
+  style: "normal",
   variable: "--font-press-start",
-  subsets: ["latin"],
   display: "swap",
 });
 
-const vt323 = VT323({
+const vt323 = localFont({
+  src: "./fonts/VT323-Regular.ttf",
   weight: "400",
+  style: "normal",
   variable: "--font-vt323",
-  subsets: ["latin"],
   display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "MonkeGram — Wear Your Monkey",
+  metadataBase: new URL("https://ath.camera/monkegram/"),
+  title: "MonkeGram — Wear Your Monke",
   description:
-    "Find your Solana Monkey Business PFP, wear it as a live face mask, record a clip, and download it. No wallet. No login. Just monkeys.",
+    "Wear any Solana Monkey Business PFP as a live face mask, record a clip, post it to X, or save it to your device.",
   openGraph: {
-    title: "MonkeGram — Wear Your Monkey",
+    title: "MonkeGram — Wear Your Monke",
     description:
-      "Find your SMB PFP, wear it as a live face mask, record, download.",
+      "Wear an SMB PFP as a live face mask, record, post to X, or save.",
     type: "website",
+  },
+  icons: {
+    icon: `${BASE_PATH}/mglogo.png`,
+    apple: `${BASE_PATH}/mglogo.png`,
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0a0a0a",
+  themeColor: "#0c2a18",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,

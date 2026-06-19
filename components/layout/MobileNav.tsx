@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { Search, Video } from "lucide-react";
 
 const NAV = [
-  { href: "/", label: "FIND", icon: Search },
+  { href: "/find", label: "FIND", icon: Search },
   { href: "/record", label: "RECORD", icon: Video },
 ];
 
@@ -15,8 +15,7 @@ export function MobileNav() {
   return (
     <nav className="md:hidden fixed bottom-0 inset-x-0 z-50 grid grid-cols-2 bg-screen border-t-[3px] border-grid">
       {NAV.map(({ href, label, icon: Icon }) => {
-        const active =
-          href === "/" ? pathname === "/" : pathname.startsWith(href);
+        const active = pathname.startsWith(href);
         return (
           <Link
             key={href}

@@ -1,5 +1,5 @@
 /**
- * The path the app is served under (e.g. "/monke" for ath.camera/monke).
+ * The path the app is served under (e.g. "/monkegram" for ath.camera/monkegram).
  *
  * Next.js prefixes <Link>/router and bundled assets with basePath
  * automatically, but raw fetch() calls and string asset paths (the NFT data

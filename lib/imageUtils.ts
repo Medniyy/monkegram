@@ -45,9 +45,10 @@ export function computeFaceBox(
   const cx = ((L.x + R.x) / 2) * canvasW;
   const cy = ((T.y + B.y) / 2) * canvasH;
 
-  // Pad the square to cover the whole head (hair, ears, jaw).
+  // Pad the square around the head. 1.4x frames the face without swallowing the
+  // whole screen; the user can grow/shrink via sizeOffset (-0.5..0.5).
   const base = Math.max(faceW, faceH);
-  const size = base * (1.7 + sizeOffset);
+  const size = base * (1.4 + sizeOffset);
 
   // Nudge slightly upward so the PFP's own face sits over the user's face.
   const yShift = size * 0.06;
