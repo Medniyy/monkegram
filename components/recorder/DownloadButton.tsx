@@ -31,9 +31,29 @@ function buildFilename(nft: NFT | null, ext: string) {
   return `monkegram_${who}_${stamp}.${ext}`;
 }
 
-const isIOS =
-  typeof navigator !== "undefined" &&
-  /iP(hone|ad|od)/.test(navigator.userAgent);
+const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+const isIOS = /iP(hone|ad|od)/.test(ua);
+// Touch-first devices where the OS share sheet reliably attaches a video file.
+// iPadOS Safari masquerades as "Macintosh", so also treat a touch-capable Mac
+// as mobile. Desktop Chrome/Edge report canShare(files)===true but their share
+// path is unreliable, so we must NOT route desktop through navigator.share.
+const isMobileLike =
+  /Mobi|Android|iP(hone|ad|od)/i.test(ua) ||
+  (/Macintosh/.test(ua) &&
+    typeof navigator !== "undefined" &&
+    navigator.maxTouchPoints > 1);
+
+/** Open X's web composer pre-filled with the caption (the clip is attached
+ *  manually from the download — desktop browsers can't attach files to X).
+ *  MUST be called synchronously inside a click handler (before any await) or
+ *  the browser's popup blocker silently swallows it. */
+function openXWebIntent() {
+  if (typeof window === "undefined") return;
+  const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(
+    SHARE_CAPTION
+  )}`;
+  window.open(url, "_blank", "noopener,noreferrer");
+}
 
 export function DownloadButton({ result, nft }: DownloadButtonProps) {
   const [showIOSHint, setShowIOSHint] = useState(false);
@@ -53,20 +73,47 @@ export function DownloadButton({ result, nft }: DownloadButtonProps) {
     }
   };
 
+  // True only where we'll actually use the native OS share sheet for the file.
+  const useNativeShareSheet = !hasNativeBridge && isMobileLike && canShareFiles();
+
+  // Save the clip to disk via a real anchor download (works on every desktop
+  // browser and Android Chrome; iOS Safari ignores `download`, handled by caller).
+  const downloadFile = () => {
+    const a = document.createElement("a");
+    a.href = result.url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  const copyCaption = async () => {
+    try {
+      await navigator.clipboard?.writeText(SHARE_CAPTION);
+    } catch {
+      /* clipboard blocked — non-fatal */
+    }
+  };
+
+  // Desktop path. POST TO X just goes to X — opening the composer with the
+  // caption prefilled (DOWNLOAD is a separate button for grabbing the clip to
+  // attach). window.open is synchronous and runs before any await, so the popup
+  // blocker lets the X tab through.
+  const desktopShareToX = () => {
+    openXWebIntent();
+    void copyCaption(); // fires synchronously; activation still valid
+    setMessage("X OPENED IN A NEW TAB. CAPTION COPIED — DOWNLOAD THE CLIP TO ATTACH IT.");
+  };
+
   const handleShare = async () => {
     setMessage(null);
-    setBusy("share");
-    setProgress(0);
-    try {
-      if (hasNativeBridge) {
-        // The shell opens X directly with the clip + this caption in the share
-        // intent. X drops intent text when a video is attached, so we also copy
-        // the caption for a one-tap paste in the composer.
-        try {
-          await navigator.clipboard?.writeText(SHARE_CAPTION);
-        } catch {
-          /* clipboard blocked — non-fatal */
-        }
+
+    // Seeker shell: hand the clip to the native bridge (opens X with it attached).
+    if (hasNativeBridge) {
+      setBusy("share");
+      setProgress(0);
+      try {
+        await copyCaption();
         await sendClipToNative({
           blob: result.blob,
           filename,
@@ -74,26 +121,52 @@ export function DownloadButton({ result, nft }: DownloadButtonProps) {
           caption: SHARE_CAPTION,
           onProgress: setProgress,
         });
-      } else {
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          setMessage(
+            error instanceof Error ? error.message : "Could not share this clip."
+          );
+        }
+      } finally {
+        setBusy(null);
+      }
+      return;
+    }
+
+    // Mobile browsers: the OS share sheet can attach the file directly.
+    if (useNativeShareSheet) {
+      setBusy("share");
+      try {
         const file = new File([result.blob], filename, {
           type: result.blob.type,
         });
+        await copyCaption();
         await navigator.share({
           files: [file],
           title: "MonkeGram",
           text: SHARE_CAPTION,
         });
+      } catch (error) {
+        // Cancelling the sheet is not a failure; any other failure → just save
+        // the clip (don't try to open a popup here — it'd be blocked post-await).
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          await copyCaption();
+          if (isIOS) {
+            window.open(result.url, "_blank");
+            setShowIOSHint(true);
+          } else {
+            downloadFile();
+          }
+          setMessage("CLIP SAVED — CAPTION COPIED. OPEN X TO POST IT.");
+        }
+      } finally {
+        setBusy(null);
       }
-    } catch (error) {
-      // AbortError means the user closed the share sheet; that is not a failure.
-      if (!(error instanceof DOMException && error.name === "AbortError")) {
-        setMessage(
-          error instanceof Error ? error.message : "Could not share this clip."
-        );
-      }
-    } finally {
-      setBusy(null);
+      return;
     }
+
+    // Desktop (no usable file share): open X synchronously + download to attach.
+    desktopShareToX();
   };
 
   const handleDownload = async () => {
@@ -119,22 +192,36 @@ export function DownloadButton({ result, nft }: DownloadButtonProps) {
       return;
     }
 
-    // iOS Safari ignores the download attribute — open in a new tab and
-    // tell the user to long-press to save.
+    // iOS Safari can't trigger a file download — opening the blob just shows it
+    // in a tab with no Save button (and going back drops it). The reliable save
+    // path is the native share sheet, which offers "Save Video". Summon it
+    // directly (no await before share(), to keep the click's user activation).
     if (isIOS) {
-      window.open(result.url, "_blank");
-      setShowIOSHint(true);
+      if (canShareFiles()) {
+        try {
+          const file = new File([result.blob], filename, {
+            type: result.blob.type,
+          });
+          await navigator.share({ files: [file] });
+        } catch (error) {
+          // Cancelling the sheet is fine; anything else → fall back to the tab.
+          if (!(error instanceof DOMException && error.name === "AbortError")) {
+            window.open(result.url, "_blank");
+            setShowIOSHint(true);
+          }
+        }
+      } else {
+        window.open(result.url, "_blank");
+        setShowIOSHint(true);
+      }
       return;
     }
-    const a = document.createElement("a");
-    a.href = result.url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    downloadFile();
   };
 
-  const shareSupported = hasNativeBridge || canShareFiles();
+  // POST TO X is always offered: native bridge or file-share when available,
+  // and a download + web-intent fallback everywhere else (incl. desktop).
+  const shareSupported = true;
   const transferPercent = Math.round(progress * 100);
 
   return (
@@ -175,14 +262,18 @@ export function DownloadButton({ result, nft }: DownloadButtonProps) {
           ? `SAVING · ${transferPercent}%`
           : hasNativeBridge
             ? "SAVE TO DEVICE"
-            : "DOWNLOAD"}
+            : isIOS
+              ? "SAVE VIDEO"
+              : "DOWNLOAD"}
       </PixelButton>
 
-      {shareSupported && !busy && (
+      {!busy && (
         <p className="font-[family-name:var(--font-body)] text-cream/45 text-base text-center leading-snug">
           {hasNativeBridge
             ? "Opens X with your clip attached. Caption (@MonkeDAO #monkegram) is copied — just paste it into the post."
-            : "Choose X in the share sheet. Caption (@MonkeDAO #monkegram) is copied — just paste it."}
+            : useNativeShareSheet
+              ? "Choose X in the share sheet. Caption (@MonkeDAO #monkegram) is copied — just paste it."
+              : "Opens X with the caption (@MonkeDAO #monkegram) ready. Use DOWNLOAD to grab the clip and attach it to your post."}
         </p>
       )}
 

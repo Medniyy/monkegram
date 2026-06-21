@@ -442,6 +442,48 @@ Key landmarks for mask bounding box:
 
 ---
 
+## Post-launch updates (2026-06-21, v1.0.1 → v1.0.2)
+
+Shipped after MonkeGram went live on the Seeker dApp Store. Web changes deploy to
+gh-pages instantly (no store review); see `store-submission/RELEASE_GUIDE.md`.
+
+### Recording & sharing fixes (cross-platform: Seeker, iPhone/Safari, desktop)
+- **MP4 export** (`useMediaRecorder.ts`): MIME order is now **MP4 (H.264) first**,
+  WebM fallback — WebM doesn't play on Apple devices. iOS/desktop record MP4.
+- **iOS mid-clip freeze — FIXED.** On iPhone the video froze a few seconds in while
+  audio kept going (PC was always fine). Cause: iOS Safari MediaRecorder stalls its
+  video encoder when the buffer isn't drained. Fix = **`recorder.start(1000)`** (1s
+  timeslice → periodic flush) + a **~30fps `requestFrame()` pump** on a
+  `captureStream(0)` track (the auto-pacer freezes on iOS).
+- **Desktop "Post to X"** (`DownloadButton.tsx`): desktop can't attach a video to X
+  and `navigator.share({files})` throws "Permission denied". POST TO X now opens X's
+  web composer **synchronously** (pre-await, so the popup blocker allows it) with the
+  caption; DOWNLOAD is the separate button to grab the clip. Platform split:
+  Seeker→native bridge, mobile→OS share sheet, desktop→X web-intent.
+- **iOS save** (`DownloadButton.tsx`): iOS Safari can't trigger a file download, so
+  the save button (labeled **"SAVE VIDEO"** on iOS) opens the native share sheet →
+  "Save Video" instead of a dead-end blob tab.
+
+### `/watch` — demo & pitch player
+- New route `app/watch/page.tsx` + `components/watch/MediaPlayer.tsx`: a **Windows
+  Media Player-styled** window (gold title bar, black stage, custom
+  transport/seek/volume/fullscreen controls) with a **DEMO / PITCH** switcher below,
+  in the MonkeGram palette. Added to mobile + desktop nav (3 tabs now).
+- Videos live in `public/videos/` (`demo.mp4` 4 MB, `pitch.mp4` 9.7 MB), transcoded
+  from the source MOV/MP4 to **H.264 + faststart, 720-class, 30fps** via ffmpeg for
+  fast streaming (originals were HEVC / 113 MB). Posters: `*-poster.jpg`.
+
+### Native shell (v1.0.2, `monkegram-mobile`)
+- **Wallet connect recovery** (`components/auth/auth-provider.tsx`): the MWA sign-in
+  could hang on "Opening wallet…" forever after returning from the wallet (Android
+  recreates the Activity, dropping the in-flight promise; the kit only hydrates the
+  session once at mount). Fix = re-hydrate the auth cache on every `AppState` resume
+  + a 90s timeout + a "Try again" retry on sign-in. Still **pure MWA** — no change to
+  the connect mechanism.
+- Stripped the unused `SYSTEM_ALERT_WINDOW` permission (app.json `blockedPermissions`).
+
+---
+
 ## Updates since MVP (2026-06-18)
 
 Features added after the original spec above. The stack is unchanged (Next.js 16

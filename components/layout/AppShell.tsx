@@ -12,11 +12,16 @@ import { MobileNav } from "./MobileNav";
  *
  * The welcome screen ("/") and the recorder ("/record") are full-bleed — they
  * render their own full-screen layout and get no app chrome (the recorder is a
- * camera view with its own overlay controls + back button).
+ * camera view with its own overlay controls + back button). "/watch" is a
+ * standalone, shareable demo/pitch page (not part of the app's tab flow), so it
+ * is full-bleed too.
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const fullBleed = pathname === "/" || pathname.startsWith("/record");
+  const fullBleed =
+    pathname === "/" ||
+    pathname.startsWith("/record") ||
+    pathname.startsWith("/watch");
 
   if (fullBleed) return <>{children}</>;
 
