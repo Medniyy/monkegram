@@ -33,7 +33,13 @@ bridge, mobile share-sheet, desktop X-web-intent; iOS "SAVE VIDEO" uses the shar
 sheet), `components/watch/MediaPlayer.tsx` (videos in `public/videos/`, transcoded
 H.264 w/ faststart), `store/useAppStore.ts`, `components/onboarding/StoryTutorial.tsx`
 (context-aware web vs app copy), `lib/bridge.ts` (shell bridge), `lib/nftData.ts`
-(Arweave/Irys data; `resilientImage` rewrites arweave.net→permagate.io).
+(NFT lookups: **API-first via MonkeAPI** — O(1) by token number + CORS-safe
+`/img` proxy for gen2 **and** gen3 — with the bundled `/public/data/*.json` as
+automatic fallback; `NEXT_PUBLIC_MONKE_API_URL` baked in `next.config.ts`;
+`resilientImage` rewrites arweave.net→permagate.io on the fallback path only).
+Sibling repo **`../MonkeAPI`** (`Medniyy/MonkeAPI`, Railway) hosts that API;
+background removal stays **on-device** (`lib/removeBackground.ts`) — the API's
+`cutout` field is intentionally unused to keep storage cost at zero.
 
 **Post-record priority:** hand the completed clip to Android's share sheet for
 posting to X. Saving to the device/video library is the secondary action.

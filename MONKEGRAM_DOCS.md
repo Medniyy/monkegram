@@ -442,6 +442,32 @@ Key landmarks for mask bounding box:
 
 ---
 
+## MonkeAPI integration (2026-06-22)
+
+NFT data now comes from **MonkeAPI** (`Medniyy/MonkeAPI`, Fastify on Railway at
+`https://monkeapi-production.up.railway.app`), the sibling repo at `../MonkeAPI`.
+
+- **Why:** the old path downloaded the whole `/public/data/{collection}.json`
+  (~0.5–1 MB) just to read one token. `lib/nftData.ts` is now **API-first**:
+  `GET /v1/{collection}/{id}` is O(1) by token number. Both **gen2 and gen3**
+  resolve through it, with the bundled static JSON kept as an **automatic
+  fallback** (a definitive 404 returns null; a network/5xx error falls through to
+  static, so an API outage never breaks lookups). `preloadCollection` is a no-op
+  when the API is on; `getNFTs` now resolves in parallel.
+- **Images:** the API returns a CORS-safe `/img/{collection}/{id}.png` proxy URL
+  (immutable cache, `ACAO:*`, `CORP: cross-origin`) — canvas-safe for recording.
+  `NEXT_PUBLIC_MONKE_API_URL` is baked in `next.config.ts` (default = the Railway
+  URL; set to `""` to use static JSON only).
+- **gen3 proxy fix:** `gateway.irys.xyz` now 307-redirects gen3 art to
+  `*.mainnet-1.datasprite-cdn.com`; that host was added to MonkeAPI's
+  `ALLOWED_IMAGE_HOSTS` (Railway env var + code default) or every gen3 image 502s.
+- **Background removal stays on-device** (`lib/removeBackground.ts`). The API can
+  serve precomputed/lazy cutouts (`cutout` field, `/cut` route) but we
+  **deliberately don't use it** — one flood-fill per session is ~free on-device,
+  whereas hosting 13k cutout PNGs costs storage + bandwidth for no real gain.
+
+---
+
 ## Post-launch updates (2026-06-21, v1.0.1 → v1.0.2)
 
 Shipped after MonkeGram went live on the Seeker dApp Store. Web changes deploy to
