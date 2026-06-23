@@ -99,35 +99,36 @@ export default function Home() {
     };
   }, [shellMode, bridgedOwned]);
 
-  // Debounced lookup whenever the number or collection changes.
-  const lookupRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Searching is explicit (tap SEARCH / press Enter) — we don't query the API
+  // for every intermediate value while the number is being typed (1 → 13 → 135),
+  // which fired three lookups instead of one. Editing the number only clears any
+  // shown result; it never hits the API. `searchSeq` invalidates a stale in-flight
+  // search if the number changes (or a new search starts) before it resolves.
+  const searchSeq = useRef(0);
   useEffect(() => {
-    if (lookupRef.current) clearTimeout(lookupRef.current);
-
-    const num = Number(query);
-    if (!query || Number.isNaN(num) || num < 1) {
-      setStatus("idle");
-      setResult(null);
-      return;
-    }
-
-    setStatus("loading");
-    lookupRef.current = setTimeout(async () => {
-      const nft = await getNFT(collection, num);
-      if (nft) {
-        setResult(nft);
-        setStatus("found");
-      } else {
-        setResult(null);
-        setStatus("notfound");
-      }
-    }, 200);
-
-    return () => {
-      if (lookupRef.current) clearTimeout(lookupRef.current);
-    };
+    searchSeq.current += 1;
+    setStatus("idle");
+    setResult(null);
   }, [query, collection]);
 
+  const runSearch = useCallback(async () => {
+    const num = Number(query);
+    if (!query || Number.isNaN(num) || num < 1) return;
+    const seq = (searchSeq.current += 1);
+    setStatus("loading");
+    const nft = await getNFT(collection, num);
+    if (seq !== searchSeq.current) return; // superseded by a newer edit/search
+    if (nft) {
+      setResult(nft);
+      setStatus("found");
+    } else {
+      setResult(null);
+      setStatus("notfound");
+    }
+  }, [query, collection]);
+
+  // Used for both the number-search result and gallery taps. A gallery tap
+  // already carries the full NFT, so wear it straight away (no extra search).
   const handleUse = useCallback(
     (nft: NFT) => {
       addRecent({ collection: nft.collection, id: nft.id });
@@ -137,27 +138,16 @@ export default function Home() {
     [router, setSelectedNFT]
   );
 
-  const handleGallerySelect = useCallback((nft: NFT) => {
-    setCollection(nft.collection);
-    setQuery(String(nft.id));
-    if (typeof window !== "undefined")
-      window.scrollTo({ top: 0, behavior: "smooth" });
-  }, []);
-
-  const submit = useCallback(() => {
-    if (status === "found" && result) handleUse(result);
-  }, [status, result, handleUse]);
-
   return (
-    <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 md:py-12 flex flex-col gap-6 md:gap-10">
+    <div className="max-w-5xl mx-auto px-4 md:px-8 py-4 md:py-12 flex flex-col gap-5 md:gap-10">
       {/* Hero */}
       <header className="text-center md:text-left">
         {/* Logo — mobile only (desktop shows it in the sidebar). */}
-        <BrandLogo size={72} className="md:hidden mx-auto mb-4" />
+        <BrandLogo size={56} className="md:hidden mx-auto mb-2" />
         <h1 className="font-[family-name:var(--font-display)] text-banana text-2xl md:text-4xl leading-tight">
           {shellMode ? "PICK YOUR MONKE" : "FIND YOUR MONKE"}
         </h1>
-        <p className="text-cream/60 text-xl mt-2">
+        <p className="hidden md:block text-cream/60 text-xl mt-2">
           {shellMode
             ? "Tap one you hold — or find any monke by number."
             : "Type your number. Wear it. Record it."}
@@ -185,14 +175,14 @@ export default function Home() {
               <SearchBar
                 value={query}
                 onChange={setQuery}
-                onSubmit={submit}
+                onSubmit={runSearch}
                 maxDigits={MAX_DIGITS}
               />
             </div>
 
             {/* Mobile: big display + numpad */}
             <div className="md:hidden w-full flex flex-col items-center gap-4">
-              <div className="pixel-border bg-screen w-full max-w-xs text-center py-3">
+              <div className="pixel-border bg-screen w-full max-w-xs text-center py-2">
                 <span className="font-[family-name:var(--font-body)] text-5xl text-cream">
                   {query || <span className="text-cream/30">0000</span>}
                 </span>
@@ -207,6 +197,22 @@ export default function Home() {
                 onClear={() => setQuery("")}
               />
             </div>
+
+            {/* Explicit search — one query per number, not one per digit typed. */}
+            <button
+              type="button"
+              onClick={runSearch}
+              disabled={!query}
+              className="
+                w-full max-w-xs md:max-w-sm pixel-border bg-banana text-screen
+                font-[family-name:var(--font-display)] text-sm py-3
+                disabled:opacity-40 disabled:pointer-events-none
+                active:translate-x-[4px] active:translate-y-[4px] active:shadow-none
+                transition-transform duration-75
+              "
+            >
+              SEARCH
+            </button>
           </div>
 
           {/* Result */}
@@ -231,7 +237,7 @@ export default function Home() {
           title={galleryTitle}
           nfts={gallery}
           loading={galleryLoading}
-          onSelect={shellMode ? handleUse : handleGallerySelect}
+          onSelect={handleUse}
         />
       )}
     </div>
