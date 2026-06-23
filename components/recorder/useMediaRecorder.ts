@@ -8,16 +8,26 @@ export const MAX_SECONDS = 60;
 /** Opus at 128 kbps — clear voice, well above the WebView's low default. */
 const AUDIO_BITRATE = 128_000;
 
-/** High-quality mic capture. The WebRTC voice-processing chain (echo cancel /
- *  noise suppression / auto-gain) is tuned for phone calls and makes recorded
- *  audio sound thin and "underwater"; we disable it to capture raw, full-range
- *  stereo sound like the native camera does. */
+/** High-quality mic capture tuned to sound like the native camera.
+ *
+ *  echoCancellation / noiseSuppression are what make WebRTC mic audio sound thin
+ *  and "underwater" (they're tuned for phone calls), so we keep them OFF for a
+ *  raw, full-range sound.
+ *
+ *  BUT autoGainControl must stay ON: it's the level-normaliser that brings a
+ *  quiet phone mic up to a comfortable loudness — exactly what the native camera
+ *  app does. With it off, the raw mic signal records far too quiet ("barely
+ *  hearable"). Disabling it earlier (to chase the underwater artifact, which is
+ *  actually from noiseSuppression) is what made the audio inaudible.
+ *
+ *  channelCount is mono: phone mics are single-capsule, so asking for stereo
+ *  lands the signal in one channel only and plays back ~6 dB quieter. */
 const AUDIO_CONSTRAINTS: MediaTrackConstraints = {
   echoCancellation: false,
   noiseSuppression: false,
-  autoGainControl: false,
+  autoGainControl: true,
   sampleRate: 48_000,
-  channelCount: 2,
+  channelCount: 1,
 };
 
 // MP4 (H.264/AAC) first: WebM doesn't play on Apple devices (Safari, iOS, macOS
