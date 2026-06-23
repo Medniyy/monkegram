@@ -23,11 +23,11 @@ export function NumberPad({ onDigit, onBackspace, onClear }: NumberPadProps) {
         </PadKey>
       ))}
       <PadKey onClick={onClear} aria-label="Clear">
-        <span className="text-base">CLR</span>
+        <span className="text-sm">CLR</span>
       </PadKey>
       <PadKey onClick={() => onDigit("0")}>0</PadKey>
-      <PadKey onClick={onBackspace} aria-label="Backspace">
-        <Delete size={24} strokeWidth={2.5} />
+      <PadKey onClick={onBackspace} aria-label="Backspace" tone="danger">
+        <Delete size={20} strokeWidth={2.5} />
       </PadKey>
     </div>
   );
@@ -36,22 +36,28 @@ export function NumberPad({ onDigit, onBackspace, onClear }: NumberPadProps) {
 function PadKey({
   children,
   onClick,
+  tone = "default",
   ...props
 }: {
   children: React.ReactNode;
   onClick: () => void;
+  tone?: "default" | "danger";
   "aria-label"?: string;
 }) {
+  // The delete/backspace key is red so it reads as distinct from the digits.
+  const toneClasses =
+    tone === "danger" ? "bg-pixelred text-cream" : "bg-grid text-cream";
+
   return (
     <button
       onClick={onClick}
-      className="
-        aspect-square flex items-center justify-center
-        bg-grid text-cream pixel-border
-        font-[family-name:var(--font-body)] text-4xl
+      className={`
+        h-14 flex items-center justify-center
+        ${toneClasses} pixel-border
+        font-[family-name:var(--font-body)] text-3xl
         active:translate-x-[4px] active:translate-y-[4px] active:shadow-none
         transition-transform duration-75
-      "
+      `}
       {...props}
     >
       {children}

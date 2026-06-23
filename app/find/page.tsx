@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import type { Collection, NFT } from "@/lib/types";
 import { getNFT, getNFTs, preloadCollection } from "@/lib/nftData";
 import { addRecent, getRecent } from "@/lib/recentlyViewed";
-import { FEATURED } from "@/lib/featured";
 import { useBridgedOwned, useBridgedSelected, resolveBridged } from "@/lib/bridge";
 import { useAppStore } from "@/store/useAppStore";
 import { CollectionToggle } from "@/components/common/CollectionToggle";
@@ -51,7 +50,7 @@ export default function Home() {
   const [result, setResult] = useState<NFT | null>(null);
 
   const [gallery, setGallery] = useState<NFT[]>([]);
-  const [galleryTitle, setGalleryTitle] = useState("FEATURED MONKES");
+  const [galleryTitle, setGalleryTitle] = useState("RECENTLY WORN");
   const [galleryLoading, setGalleryLoading] = useState(true);
 
   // Gen2 and Gen3 number differently (Gen3 ids run into 5 digits), so we
@@ -65,7 +64,9 @@ export default function Home() {
   }, [collection]);
 
   // Load the gallery once. In shell mode it's the wallet's owned monkeys;
-  // otherwise recently-viewed, or the featured seed as fallback.
+  // otherwise recently-viewed only. There's no "featured" fallback — the grid
+  // appears only once the user has actually worn a monke, so the finder stays a
+  // single screen on first visit.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -79,9 +80,15 @@ export default function Home() {
         return;
       }
       const recent = getRecent();
-      const refs = recent.length > 0 ? recent : FEATURED;
-      setGalleryTitle(recent.length > 0 ? "RECENTLY WORN" : "FEATURED MONKES");
-      const nfts = await getNFTs(refs);
+      if (recent.length === 0) {
+        if (!cancelled) {
+          setGallery([]);
+          setGalleryLoading(false);
+        }
+        return;
+      }
+      setGalleryTitle("RECENTLY WORN");
+      const nfts = await getNFTs(recent);
       if (!cancelled) {
         setGallery(nfts);
         setGalleryLoading(false);
@@ -142,7 +149,7 @@ export default function Home() {
   }, [status, result, handleUse]);
 
   return (
-    <div className="max-w-5xl mx-auto px-4 md:px-8 py-8 md:py-12 flex flex-col gap-10">
+    <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 md:py-12 flex flex-col gap-6 md:gap-10">
       {/* Hero */}
       <header className="text-center md:text-left">
         {/* Logo — mobile only (desktop shows it in the sidebar). */}
@@ -157,8 +164,9 @@ export default function Home() {
         </p>
       </header>
 
-      {/* "What's next?" teaser — placeholder copy, edit freely. */}
-      <div className="pixel-border-banana bg-grid px-4 py-3 flex items-center gap-3">
+      {/* "What's next?" teaser — desktop only; hidden on mobile to keep the
+          finder a single screen. */}
+      <div className="pixel-border-banana bg-grid px-4 py-3 hidden md:flex items-center gap-3">
         <span className="font-[family-name:var(--font-display)] text-banana text-[10px] shrink-0">
           WHAT&apos;S NEXT?
         </span>
@@ -169,7 +177,7 @@ export default function Home() {
 
       {/* Pick a monke — by number anywhere; the owned grid is below in the app. */}
       <>
-          <div className="flex flex-col items-center gap-6">
+          <div className="flex flex-col items-center gap-4 md:gap-6">
             <CollectionToggle value={collection} onChange={setCollection} />
 
             {/* Desktop: text input */}
@@ -183,8 +191,8 @@ export default function Home() {
             </div>
 
             {/* Mobile: big display + numpad */}
-            <div className="md:hidden w-full flex flex-col items-center gap-5">
-              <div className="pixel-border bg-screen w-full max-w-xs text-center py-4">
+            <div className="md:hidden w-full flex flex-col items-center gap-4">
+              <div className="pixel-border bg-screen w-full max-w-xs text-center py-3">
                 <span className="font-[family-name:var(--font-body)] text-5xl text-cream">
                   {query || <span className="text-cream/30">0000</span>}
                 </span>
@@ -215,13 +223,17 @@ export default function Home() {
           </div>
         </>
 
-      {/* Gallery — owned monkeys in shell mode (tap goes straight to record). */}
-      <NFTGrid
-        title={galleryTitle}
-        nfts={gallery}
-        loading={galleryLoading}
-        onSelect={shellMode ? handleUse : handleGallerySelect}
-      />
+      {/* Gallery — owned monkeys in shell mode, otherwise "recently worn".
+          Hidden entirely until there's something to show, so the finder is one
+          screen on first visit (no "featured" fallback). */}
+      {(shellMode || gallery.length > 0) && (
+        <NFTGrid
+          title={galleryTitle}
+          nfts={gallery}
+          loading={galleryLoading}
+          onSelect={shellMode ? handleUse : handleGallerySelect}
+        />
+      )}
     </div>
   );
 }
