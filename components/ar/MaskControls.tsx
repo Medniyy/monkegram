@@ -64,11 +64,16 @@ export function MaskSettings() {
  * The toggles used most often, overlaid directly on the camera (camera-app
  * style): cut background, flip, mic.
  */
-export function MaskQuickToggles() {
+export function MaskQuickToggles({ micBlocked = false }: { micBlocked?: boolean }) {
   const mask = useAppStore((s) => s.mask);
   const setMask = useAppStore((s) => s.setMask);
   const audioEnabled = useAppStore((s) => s.audioEnabled);
   const setAudioEnabled = useAppStore((s) => s.setAudioEnabled);
+
+  // When the OS blocked the mic, the toggle can't enable audio — reflect the
+  // real state (off) so it doesn't falsely read "MIC ON". The banner handles
+  // re-requesting permission.
+  const micOn = audioEnabled && !micBlocked;
 
   return (
     <>
@@ -87,11 +92,11 @@ export function MaskQuickToggles() {
         <FlipHorizontal2 size={20} strokeWidth={2.5} />
       </OverlayToggle>
       <OverlayToggle
-        active={audioEnabled}
-        onClick={() => setAudioEnabled(!audioEnabled)}
-        label={audioEnabled ? "MIC ON" : "MIC OFF"}
+        active={micOn}
+        onClick={() => !micBlocked && setAudioEnabled(!audioEnabled)}
+        label={micBlocked ? "MIC BLOCKED" : micOn ? "MIC ON" : "MIC OFF"}
       >
-        {audioEnabled ? (
+        {micOn ? (
           <Mic size={20} strokeWidth={2.5} />
         ) : (
           <MicOff size={20} strokeWidth={2.5} />

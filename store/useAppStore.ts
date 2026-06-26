@@ -13,6 +13,11 @@ export interface MaskSettings {
   removeBg: boolean; // chroma-key the PFP's flat background away
 }
 
+/** What the shutter produces. */
+export type CaptureMode = "video" | "photo";
+/** Which camera the stream uses (front selfie vs rear for group photos). */
+export type CameraFacing = "user" | "environment";
+
 /** Recording quality presets: canvas cap (px) + encoder bitrate (bps). */
 export type VideoQuality = "sd" | "hd" | "full";
 
@@ -30,11 +35,15 @@ interface AppState {
   mask: MaskSettings;
   audioEnabled: boolean;
   videoQuality: VideoQuality;
+  captureMode: CaptureMode;
+  cameraFacing: CameraFacing;
   setSelectedNFT: (nft: NFT | null) => void;
   setMask: (patch: Partial<MaskSettings>) => void;
   resetMask: () => void;
   setAudioEnabled: (on: boolean) => void;
   setVideoQuality: (q: VideoQuality) => void;
+  setCaptureMode: (m: CaptureMode) => void;
+  setCameraFacing: (f: CameraFacing) => void;
 }
 
 const DEFAULT_MASK: MaskSettings = {
@@ -51,9 +60,13 @@ export const useAppStore = create<AppState>((set) => ({
   mask: DEFAULT_MASK,
   audioEnabled: true,
   videoQuality: "full",
+  captureMode: "video",
+  cameraFacing: "user",
   setSelectedNFT: (nft) => set({ selectedNFT: nft }),
   setMask: (patch) => set((s) => ({ mask: { ...s.mask, ...patch } })),
   resetMask: () => set({ mask: DEFAULT_MASK }),
   setAudioEnabled: (on) => set({ audioEnabled: on }),
   setVideoQuality: (q) => set({ videoQuality: q }),
+  setCaptureMode: (m) => set({ captureMode: m }),
+  setCameraFacing: (f) => set({ cameraFacing: f }),
 }));

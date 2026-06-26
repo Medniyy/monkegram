@@ -62,6 +62,10 @@ export function DownloadButton({ result, nft }: DownloadButtonProps) {
   const [message, setMessage] = useState<string | null>(null);
   const filename = buildFilename(nft, result.ext);
   const hasNativeBridge = canUseNativeClipBridge();
+  // Photo mode reuses this whole flow; only the wording differs.
+  const isPhoto = /^(jpe?g|png)$/i.test(result.ext);
+  const noun = isPhoto ? "photo" : "clip";
+  const NOUN = noun.toUpperCase();
 
   const canShareFiles = () => {
     if (typeof navigator === "undefined" || !navigator.canShare) return false;
@@ -157,7 +161,7 @@ export function DownloadButton({ result, nft }: DownloadButtonProps) {
           } else {
             downloadFile();
           }
-          setMessage("CLIP SAVED — CAPTION COPIED. OPEN X TO POST IT.");
+          setMessage(`${NOUN} SAVED — CAPTION COPIED. OPEN X TO POST IT.`);
         }
       } finally {
         setBusy(null);
@@ -181,7 +185,7 @@ export function DownloadButton({ result, nft }: DownloadButtonProps) {
           action: "save",
           onProgress: setProgress,
         });
-        setMessage("SAVED TO YOUR VIDEO LIBRARY");
+        setMessage(isPhoto ? "SAVED TO YOUR PHOTOS" : "SAVED TO YOUR VIDEO LIBRARY");
       } catch (error) {
         setMessage(
           error instanceof Error ? error.message : "Could not save this clip."
@@ -261,19 +265,23 @@ export function DownloadButton({ result, nft }: DownloadButtonProps) {
         {busy === "save"
           ? `SAVING · ${transferPercent}%`
           : hasNativeBridge
-            ? "SAVE TO DEVICE"
+            ? isPhoto
+              ? "SAVE PHOTO"
+              : "SAVE TO DEVICE"
             : isIOS
-              ? "SAVE VIDEO"
+              ? isPhoto
+                ? "SAVE PHOTO"
+                : "SAVE VIDEO"
               : "DOWNLOAD"}
       </PixelButton>
 
       {!busy && (
         <p className="font-[family-name:var(--font-body)] text-cream/45 text-base text-center leading-snug">
           {hasNativeBridge
-            ? "Opens X with your clip attached. Caption (@MonkeDAO #monkegram) is copied — just paste it into the post."
+            ? `Opens X with your ${noun} attached. Caption (@MonkeDAO #monkegram) is copied — just paste it into the post.`
             : useNativeShareSheet
               ? "Choose X in the share sheet. Caption (@MonkeDAO #monkegram) is copied — just paste it."
-              : "Opens X with the caption (@MonkeDAO #monkegram) ready. Use DOWNLOAD to grab the clip and attach it to your post."}
+              : `Opens X with the caption (@MonkeDAO #monkegram) ready. Use DOWNLOAD to grab the ${noun} and attach it to your post.`}
         </p>
       )}
 
@@ -288,7 +296,9 @@ export function DownloadButton({ result, nft }: DownloadButtonProps) {
 
       {showIOSHint && (
         <p className="font-[family-name:var(--font-body)] text-banana text-lg text-center leading-snug">
-          LONG-PRESS THE VIDEO → &quot;SAVE TO FILES&quot;
+          {isPhoto
+            ? "LONG-PRESS THE IMAGE → “SAVE TO PHOTOS”"
+            : "LONG-PRESS THE VIDEO → “SAVE TO FILES”"}
         </p>
       )}
     </div>

@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useAppStore } from "@/store/useAppStore";
+import { AUDIO_CONSTRAINTS } from "@/lib/audio";
 
 export type CameraStatus =
   | "idle"
@@ -10,14 +12,29 @@ export type CameraStatus =
   | "unsupported"
   | "error";
 
+/** Mic permission as it actually resolved (not just the user's toggle). */
+export type AudioStatus = "off" | "granted" | "denied";
+
 /**
- * Requests the front camera and binds it to a <video> element.
- * Returns the video ref to attach, the current status, and a retry().
+ * Requests the camera (per the selected facing) AND the microphone in a single
+ * getUserMedia call, then binds the video to a <video> element.
+ *
+ * Acquiring the mic up-front — instead of lazily at record time — is the fix for
+ * iOS Chrome (WKWebView) recording silent clips: a deferred audio request after
+ * an initial `audio:false` stream never prompted, so the mic was never granted.
+ * We now prompt for camera+mic together when the recorder mounts. If the user
+ * allows the camera but blocks the mic, the combined request rejects, so we fall
+ * back to a video-only stream (camera still works) and report `audioStatus:
+ * "denied"` so the UI can surface it. The recorder reuses this audio track.
  */
 export function useCameraStream() {
+  const facing = useAppStore((s) => s.cameraFacing);
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const audioTrackRef = useRef<MediaStreamTrack | null>(null);
   const [status, setStatus] = useState<CameraStatus>("idle");
+  const [audioStatus, setAudioStatus] = useState<AudioStatus>("off");
   const [attempt, setAttempt] = useState(0);
 
   const retry = useCallback(() => setAttempt((a) => a + 1), []);
@@ -33,49 +50,77 @@ export function useCameraStream() {
       return;
     }
 
+    const videoConstraints: MediaTrackConstraints = {
+      facingMode: facing,
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+      frameRate: { ideal: 30 },
+    };
+
+    const bind = (stream: MediaStream) => {
+      streamRef.current = stream;
+      audioTrackRef.current = stream.getAudioTracks()[0] ?? null;
+      const video = videoRef.current;
+      if (video) {
+        video.srcObject = stream;
+        video.play().catch(() => {});
+      }
+      setStatus("ready");
+    };
+
     setStatus("requesting");
+
+    // Ask for camera + mic together so the mic prompt actually appears (the
+    // whole point of the iOS fix). On rejection we can't tell which device was
+    // blocked, so retry video-only: if THAT succeeds, only the mic was denied.
     navigator.mediaDevices
-      .getUserMedia({
-        // Ask the front camera for as much as it can give (ideal, so it falls
-        // back gracefully on phones that top out lower). The canvas is capped
-        // separately per the selected quality preset.
-        video: {
-          facingMode: "user",
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          frameRate: { ideal: 30 },
-        },
-        audio: false,
-      })
+      .getUserMedia({ video: videoConstraints, audio: AUDIO_CONSTRAINTS })
       .then((stream) => {
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
           return;
         }
-        streamRef.current = stream;
-        const video = videoRef.current;
-        if (video) {
-          video.srcObject = stream;
-          video.play().catch(() => {});
-        }
-        setStatus("ready");
+        bind(stream);
+        setAudioStatus(audioTrackRef.current ? "granted" : "denied");
       })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        const name = err instanceof DOMException ? err.name : "";
-        setStatus(
-          name === "NotAllowedError" || name === "SecurityError"
-            ? "denied"
-            : "error"
-        );
-      });
+      .catch(() =>
+        navigator.mediaDevices
+          .getUserMedia({ video: videoConstraints, audio: false })
+          .then((stream) => {
+            if (cancelled) {
+              stream.getTracks().forEach((t) => t.stop());
+              return;
+            }
+            // Camera works on its own → it was the mic that was blocked.
+            bind(stream);
+            setAudioStatus("denied");
+          })
+          .catch((err: unknown) => {
+            if (cancelled) return;
+            const name = err instanceof DOMException ? err.name : "";
+            setStatus(
+              name === "NotAllowedError" || name === "SecurityError"
+                ? "denied"
+                : "error"
+            );
+          })
+      );
 
     return () => {
       cancelled = true;
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
+      audioTrackRef.current = null;
     };
-  }, [attempt]);
+  }, [attempt, facing]);
 
-  return { videoRef, status, retry };
+  // The mic toggle just enables/disables the captured track (controls the
+  // recording and the OS "mic in use" indicator) — no re-acquisition, so
+  // flipping it never restarts the camera or re-prompts.
+  const audioEnabled = useAppStore((s) => s.audioEnabled);
+  useEffect(() => {
+    if (audioTrackRef.current) audioTrackRef.current.enabled = audioEnabled;
+  }, [audioEnabled, status]);
+
+  return { videoRef, status, retry, facing, audioTrackRef, audioStatus };
 }

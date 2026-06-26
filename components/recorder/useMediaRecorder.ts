@@ -8,28 +8,6 @@ export const MAX_SECONDS = 60;
 /** Opus at 128 kbps — clear voice, well above the WebView's low default. */
 const AUDIO_BITRATE = 128_000;
 
-/** High-quality mic capture tuned to sound like the native camera.
- *
- *  echoCancellation / noiseSuppression are what make WebRTC mic audio sound thin
- *  and "underwater" (they're tuned for phone calls), so we keep them OFF for a
- *  raw, full-range sound.
- *
- *  BUT autoGainControl must stay ON: it's the level-normaliser that brings a
- *  quiet phone mic up to a comfortable loudness — exactly what the native camera
- *  app does. With it off, the raw mic signal records far too quiet ("barely
- *  hearable"). Disabling it earlier (to chase the underwater artifact, which is
- *  actually from noiseSuppression) is what made the audio inaudible.
- *
- *  channelCount is mono: phone mics are single-capsule, so asking for stereo
- *  lands the signal in one channel only and plays back ~6 dB quieter. */
-const AUDIO_CONSTRAINTS: MediaTrackConstraints = {
-  echoCancellation: false,
-  noiseSuppression: false,
-  autoGainControl: true,
-  sampleRate: 48_000,
-  channelCount: 1,
-};
-
 // MP4 (H.264/AAC) first: WebM doesn't play on Apple devices (Safari, iOS, macOS
 // QuickTime/Photos), so a WebM clip a user records here is unshareable to half
 // their audience. Every modern target — iOS Safari (MP4-only), desktop
@@ -69,7 +47,8 @@ export interface RecordingResult {
  * audio bitrates follow the selected quality preset.
  */
 export function useMediaRecorder(
-  canvasRef: RefObject<HTMLCanvasElement | null>
+  canvasRef: RefObject<HTMLCanvasElement | null>,
+  audioTrackRef?: RefObject<MediaStreamTrack | null>
 ) {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
@@ -151,18 +130,22 @@ export function useMediaRecorder(
 
     const tracks: MediaStreamTrack[] = [...canvasStream.getVideoTracks()];
 
-    // Mix in microphone audio when enabled. If the mic is blocked or missing,
-    // fall back to a silent (video-only) recording rather than failing.
-    if (useAppStore.getState().audioEnabled) {
-      try {
-        const mic = await navigator.mediaDevices.getUserMedia({
-          audio: AUDIO_CONSTRAINTS,
-        });
-        micStreamRef.current = mic;
-        tracks.push(...mic.getAudioTracks());
-      } catch {
-        micStreamRef.current = null;
-      }
+    // Mix in microphone audio when enabled, reusing the track the camera hook
+    // already acquired (mic was prompted up-front, together with the camera, so
+    // it's actually granted here — the old per-record getUserMedia silently
+    // failed on iOS Chrome). We clone it so stopping the recorder doesn't kill
+    // the live preview's mic track. If it's missing/blocked, record silently.
+    const micTrack = audioTrackRef?.current;
+    if (
+      useAppStore.getState().audioEnabled &&
+      micTrack &&
+      micTrack.readyState === "live"
+    ) {
+      const clone = micTrack.clone();
+      micStreamRef.current = new MediaStream([clone]);
+      tracks.push(clone);
+    } else {
+      micStreamRef.current = null;
     }
 
     // Apply the selected quality preset's bitrate (the canvas resolution is
