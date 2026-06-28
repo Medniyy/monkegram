@@ -2,6 +2,7 @@
 
 import { RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore, VIDEO_QUALITY } from "@/store/useAppStore";
+import { createBoostedMicTrack, type ProcessedMic } from "@/lib/audio";
 
 export const MAX_SECONDS = 60;
 
@@ -53,6 +54,9 @@ export function useMediaRecorder(
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const micStreamRef = useRef<MediaStream | null>(null);
+  // WebAudio gain/limiter graph that boosts the mic to camera loudness (see
+  // lib/audio.ts). Held so we can tear it down when recording stops.
+  const audioProcRef = useRef<ProcessedMic | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Manual canvas-frame pump (see start()). On iOS Safari the auto-capturing
@@ -70,6 +74,8 @@ export function useMediaRecorder(
   const stopMic = useCallback(() => {
     micStreamRef.current?.getTracks().forEach((t) => t.stop());
     micStreamRef.current = null;
+    audioProcRef.current?.close();
+    audioProcRef.current = null;
   }, []);
 
   const clearTimers = useCallback(() => {
@@ -133,17 +139,28 @@ export function useMediaRecorder(
     // Mix in microphone audio when enabled, reusing the track the camera hook
     // already acquired (mic was prompted up-front, together with the camera, so
     // it's actually granted here — the old per-record getUserMedia silently
-    // failed on iOS Chrome). We clone it so stopping the recorder doesn't kill
-    // the live preview's mic track. If it's missing/blocked, record silently.
+    // failed on iOS Chrome). If it's missing/blocked, record silently.
     const micTrack = audioTrackRef?.current;
     if (
       useAppStore.getState().audioEnabled &&
       micTrack &&
       micTrack.readyState === "live"
     ) {
-      const clone = micTrack.clone();
-      micStreamRef.current = new MediaStream([clone]);
-      tracks.push(clone);
+      // Route the mic through our WebAudio boost/limiter so it records loud and
+      // clean like the native camera (the WebView's own gain is unreliable when
+      // noise-suppression is off — see lib/audio.ts). The graph reads the live
+      // track without consuming it, so the preview's mic stays intact. If
+      // WebAudio is unavailable, fall back to a raw clone (so stopping the
+      // recorder doesn't kill the preview's mic track).
+      const processed = createBoostedMicTrack(micTrack);
+      if (processed) {
+        audioProcRef.current = processed;
+        tracks.push(processed.track);
+      } else {
+        const clone = micTrack.clone();
+        micStreamRef.current = new MediaStream([clone]);
+        tracks.push(clone);
+      }
     } else {
       micStreamRef.current = null;
     }
