@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   FlipHorizontal2,
-  Maximize2,
   Plus,
   RotateCcw,
   Trash2,
@@ -75,15 +74,13 @@ export function PhotoEditor({
   // A single pointer pipeline routes each gesture to the monke under the fingers
   // OR the photo: pinch a monke → it resizes (photo frozen); pinch empty space →
   // the photo reframes; drag a monke → it moves; drag empty space → photo pans.
-  // The corner handle and the slider stay as alternative (mainly desktop) resizes.
+  // The desktop size slider is the only non-gesture resize (no pinch on a mouse).
   const { containerRef, transform, screenToPhoto, bind } = usePinchZoom(
     photo.w,
     photo.h,
     {
       hitTest: (target) => {
         const el = target as Element | null;
-        const r = el?.closest?.("[data-resize]");
-        if (r) return { id: r.getAttribute("data-resize")!, kind: "resize" };
         const m = el?.closest?.("[data-monke]");
         if (m) return { id: m.getAttribute("data-monke")!, kind: "move" };
         return null;
@@ -93,25 +90,6 @@ export function PhotoEditor({
         setSlots((prev) =>
           prev.map((s) =>
             s.id === id ? { ...s, cx: s.cx + dx, cy: s.cy + dy } : s
-          )
-        ),
-      onResize: (id, x, y) =>
-        setSlots((prev) =>
-          prev.map((s) =>
-            s.id === id
-              ? {
-                  ...s,
-                  size: Math.round(
-                    Math.min(
-                      sizeMax,
-                      Math.max(
-                        sizeMin,
-                        2 * Math.max(Math.abs(x - s.cx), Math.abs(y - s.cy))
-                      )
-                    )
-                  ),
-                }
-              : s
           )
         ),
       onScale: (id, factor) =>
@@ -324,23 +302,6 @@ export function PhotoEditor({
                     </span>
                   </div>
                 )}
-
-                {/* Corner resize handle (selected monke) — drag to scale. */}
-                {isSel && slot.cutout && (
-                  <span
-                    data-resize={slot.id}
-                    aria-label="Resize monke"
-                    className="absolute right-0 bottom-0 bg-banana text-screen border-2 border-screen rounded-full flex items-center justify-center touch-none"
-                    style={{
-                      width: 30,
-                      height: 30,
-                      transform: `translate(45%, 45%) scale(${1 / transform.scale})`,
-                      transformOrigin: "bottom right",
-                    }}
-                  >
-                    <Maximize2 size={16} strokeWidth={3} />
-                  </span>
-                )}
               </div>
             );
           })}
@@ -359,7 +320,7 @@ export function PhotoEditor({
         {/* Per-monke controls when one is selected */}
         {selected && selected.cutout && (
           <div className="flex items-center gap-2 justify-center md:justify-start">
-            {/* Desktop size slider; on mobile you pinch the monke (or its corner). */}
+            {/* Desktop size slider; on mobile you pinch the monke to resize. */}
             <input
               type="range"
               min={sizeMin}

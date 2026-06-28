@@ -224,9 +224,11 @@ export function RecordView() {
           </div>
         )}
 
-        {/* Mode toggles + shutter — overlaid bottom-center */}
+        {/* Mode toggles + shutter — pinned to the very bottom so they don't ride
+            up over the subject's face (acute in landscape, where the frame is
+            short). Tighter spacing in landscape to reclaim vertical room. */}
         {showControls && (
-          <div className="absolute bottom-8 inset-x-0 z-30 flex flex-col items-center gap-3 pb-[env(safe-area-inset-bottom)]">
+          <div className="absolute bottom-0 inset-x-0 z-30 flex flex-col items-center gap-2 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] landscape:gap-1.5 landscape:pb-[max(0.4rem,env(safe-area-inset-bottom))]">
             {!isRecording && (
               <Segmented
                 options={[

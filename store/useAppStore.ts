@@ -49,7 +49,7 @@ interface AppState {
 const DEFAULT_MASK: MaskSettings = {
   opacity: 1, // fully opaque by default
   sizeOffset: 0.2, // +20% — fills the face well out of the box
-  flip: false,
+  flip: true, // mirror by default, like a phone's selfie camera (FLIP toggles off)
   blend: "source-over", // only Normal is used; no blend picker in the UI
   shape: "round",
   removeBg: true, // cut the PFP background by default

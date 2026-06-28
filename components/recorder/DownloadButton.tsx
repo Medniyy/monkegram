@@ -17,7 +17,7 @@ interface DownloadButtonProps {
 }
 
 /** Default caption auto-applied when sharing a clip. */
-const SHARE_CAPTION = "Made with MonkeGram 🐵 @MonkeDAO #monkegram";
+const SHARE_CAPTION = "Made with MonkeGram 🐵 @MonkeDAO @monkegram";
 
 function buildFilename(nft: NFT | null, ext: string) {
   const d = new Date();
@@ -278,10 +278,10 @@ export function DownloadButton({ result, nft }: DownloadButtonProps) {
       {!busy && (
         <p className="font-[family-name:var(--font-body)] text-cream/45 text-base text-center leading-snug">
           {hasNativeBridge
-            ? `Opens X with your ${noun} attached. Caption (@MonkeDAO #monkegram) is copied — just paste it into the post.`
+            ? `Opens X with your ${noun} attached. Caption (@MonkeDAO @monkegram) is copied — just paste it into the post.`
             : useNativeShareSheet
-              ? "Choose X in the share sheet. Caption (@MonkeDAO #monkegram) is copied — just paste it."
-              : `Opens X with the caption (@MonkeDAO #monkegram) ready. Use DOWNLOAD to grab the ${noun} and attach it to your post.`}
+              ? "Choose X in the share sheet. Caption (@MonkeDAO @monkegram) is copied — just paste it."
+              : `Opens X with the caption (@MonkeDAO @monkegram) ready. Use DOWNLOAD to grab the ${noun} and attach it to your post.`}
         </p>
       )}
 
