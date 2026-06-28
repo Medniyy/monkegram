@@ -139,13 +139,42 @@ export function usePinchZoom(
   };
 
   const onPointerDown = useCallback((e: ReactPointerEvent) => {
-    // Capture on the container so we keep getting moves even if the finger
+    const cur = g.current;
+
+    // A mouse has exactly one active pointer. Wipe any leftover gesture state and
+    // release any stale capture so a missed pointerup can't strand the next click
+    // — the desktop regression where the monke became un-grabbable with the left
+    // button after the first drag (the wheel kept working). Touch is untouched so
+    // the phone's multi-finger pinch is unaffected.
+    if (e.pointerType === "mouse") {
+      pointers.current.clear();
+      cur.mode = "idle";
+      cur.overlayId = null;
+      try {
+        containerRef.current?.releasePointerCapture?.(e.pointerId);
+      } catch {
+        /* nothing was captured */
+      }
+    }
+
+    // Capture on the container so we keep getting moves even if the pointer
     // drifts off the element it started on.
-    containerRef.current?.setPointerCapture?.(e.pointerId);
+    try {
+      containerRef.current?.setPointerCapture?.(e.pointerId);
+    } catch {
+      /* capture not available */
+    }
     const p = local(e);
     pointers.current.set(e.pointerId, p);
     const n = pointers.current.size;
-    const cur = g.current;
+
+    // Resolve what's under the pointer by geometry rather than e.target: with
+    // pointer capture active, e.target can be the container (hiding the monke
+    // underneath), which is what broke grabbing a monke a second time on desktop.
+    const hitEl =
+      (typeof document !== "undefined"
+        ? document.elementFromPoint(e.clientX, e.clientY)
+        : null) ?? (e.target as Element | null);
 
     if (n === 2) {
       const [a, b] = [...pointers.current.values()];
@@ -157,7 +186,7 @@ export function usePinchZoom(
       const onMonke =
         cur.mode === "move" || cur.mode === "resize"
           ? cur.overlayId
-          : overlayRef.current.hitTest?.(e.target)?.id ?? null;
+          : overlayRef.current.hitTest?.(hitEl)?.id ?? null;
       if (onMonke) {
         cur.mode = "pinch-monke";
         cur.overlayId = onMonke;
@@ -170,7 +199,7 @@ export function usePinchZoom(
     }
     if (n !== 1) return;
 
-    const hit = overlayRef.current.hitTest?.(e.target) ?? null;
+    const hit = overlayRef.current.hitTest?.(hitEl) ?? null;
     cur.moved = false;
     cur.downScreen = p;
     if (hit) {
@@ -240,6 +269,11 @@ export function usePinchZoom(
   }, []);
 
   const endPointer = useCallback((e: ReactPointerEvent) => {
+    try {
+      containerRef.current?.releasePointerCapture?.(e.pointerId);
+    } catch {
+      /* already released */
+    }
     const cur = g.current;
     const wasOverlay = cur.mode === "move" || cur.mode === "resize";
     const overlayId = cur.overlayId;
