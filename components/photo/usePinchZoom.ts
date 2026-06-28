@@ -6,6 +6,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type DragEvent as ReactDragEvent,
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
 } from "react";
@@ -147,6 +148,11 @@ export function usePinchZoom(
     // button after the first drag (the wheel kept working). Touch is untouched so
     // the phone's multi-finger pinch is unaffected.
     if (e.pointerType === "mouse") {
+      // Stop the browser starting a native text/element-drag (the 🚫 cursor) and
+      // drop any stray selection from a previous drag — that selection is what
+      // hijacked the second mousedown so the monke couldn't be grabbed again.
+      e.preventDefault();
+      if (typeof window !== "undefined") window.getSelection?.()?.removeAllRanges();
       pointers.current.clear();
       cur.mode = "idle";
       cur.overlayId = null;
@@ -336,6 +342,11 @@ export function usePinchZoom(
       onPointerUp: endPointer,
       onPointerCancel: endPointer,
       onWheel,
+      // Kill the browser's native image/selection drag (the 🚫 cursor) so a
+      // mousedown on the stage never starts dragging a selection instead of a
+      // monke — that's what left the monke un-grabbable after the first drag.
+      draggable: false,
+      onDragStart: (e: ReactDragEvent) => e.preventDefault(),
     },
   };
 }

@@ -241,7 +241,7 @@ export function PhotoEditor({
       <div
         ref={containerRef}
         {...bind}
-        className="relative flex-1 overflow-hidden touch-none bg-grid"
+        className="relative flex-1 overflow-hidden touch-none select-none bg-grid"
       >
         <div
           className="absolute top-0 left-0"
