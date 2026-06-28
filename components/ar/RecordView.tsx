@@ -100,12 +100,12 @@ export function RecordView() {
   };
 
   return (
-    <div className="min-h-dvh bg-screen flex items-center justify-center md:p-6">
+    <div className="min-h-dvh bg-screen flex items-center justify-center desktop:p-6">
       {/* Full-screen camera stage with overlay controls (camera-app style).
           Mobile: portrait, edge-to-edge (object-cover fills the phone). Desktop:
           a large landscape frame at the camera's native aspect so you see the
           WHOLE frame you're capturing (object-contain), not a cropped 9:16 slice. */}
-      <div className="relative w-full h-dvh md:h-[82vh] md:w-auto md:aspect-video md:max-w-[94vw] bg-grid overflow-hidden md:pixel-border">
+      <div className="relative w-full h-dvh desktop:h-[82vh] desktop:w-auto desktop:aspect-video desktop:max-w-[94vw] bg-grid overflow-hidden desktop:pixel-border">
         {/* Hidden source video (kept rendered so it keeps decoding) */}
         <video
           ref={videoRef}
@@ -123,7 +123,7 @@ export function RecordView() {
             canvasRef={canvasRef}
             nftImage={liveNft}
             onFaceChange={setFaceDetected}
-            className="absolute inset-0 w-full h-full object-cover md:object-contain"
+            className="absolute inset-0 w-full h-full object-cover desktop:object-contain"
           />
         )}
 

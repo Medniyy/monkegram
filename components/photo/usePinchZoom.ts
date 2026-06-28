@@ -16,43 +16,85 @@ export interface Transform {
   ty: number;
 }
 
+/** A pointerdown that landed on a draggable overlay (a monke), and whether it
+ *  hit the body (move) or the resize handle. */
+export type OverlayHit = { id: string; kind: "move" | "resize" };
+
+export interface OverlayHandlers {
+  /** Map a pointerdown target to an overlay hit, or null for the background. */
+  hitTest?: (target: EventTarget | null) => OverlayHit | null;
+  /** Pointer went down on an overlay — select it immediately. */
+  onSelect?: (id: string) => void;
+  /** Drag-move an overlay by a delta in photo pixels. */
+  onMove?: (id: string, dxPhoto: number, dyPhoto: number) => void;
+  /** Resize an overlay; (x,y) is the handle's current position in photo px. */
+  onResize?: (id: string, xPhoto: number, yPhoto: number) => void;
+  /** A tap (down+up without dragging) on an overlay. */
+  onTap?: (id: string) => void;
+}
+
 const MAX_ZOOM = 8; // relative to the fit scale
+const TAP_SLOP = 5; // screen px before a press counts as a drag, not a tap
 
 function clamp(v: number, lo: number, hi: number) {
   return Math.min(hi, Math.max(lo, v));
 }
 
 /**
- * Pinch-to-zoom + drag-to-pan for a fixed-size photo inside a container, built
- * on raw pointer events (no gesture dependency — the project hand-rolls this
- * kind of thing). The returned transform is applied as
- * `translate(tx,ty) scale(scale)` (origin 0 0) to a wrapper sized to the photo's
- * natural pixels; `screenToPhoto` converts a touch point back to photo pixels so
- * callers can hit-test and drag overlays placed in photo space.
+ * One pointer pipeline for the photo editor: pinch/pan the base photo AND
+ * drag/resize the monke overlays, so a two-finger pinch always zooms the stage —
+ * even when the fingers land on a monke (the old per-overlay handlers swallowed
+ * the second touch, which is why pinch-to-fit didn't work on mobile).
  *
- * A single finger pans; two fingers zoom around their midpoint. Overlays that
- * want to handle their own drag should `stopPropagation()` on pointerdown so the
- * background pan doesn't also fire.
+ * Routing by pointer count + what the first finger landed on (via `hitTest`):
+ *  - 1 finger on a monke body → move it · on its resize handle → resize it
+ *  - 1 finger on the background → pan the photo
+ *  - 2 fingers anywhere → zoom the photo around their midpoint (overlay drag aborts)
+ *  - mouse wheel → zoom (desktop)
+ *
+ * The transform is applied as `translate(tx,ty) scale(scale)` (origin 0 0) to a
+ * wrapper sized to the photo's natural pixels; `screenToPhoto` converts a client
+ * point back to photo pixels.
  */
-export function usePinchZoom(photoW: number, photoH: number) {
+export function usePinchZoom(
+  photoW: number,
+  photoH: number,
+  overlay: OverlayHandlers = {}
+) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [t, setT] = useState<Transform>({ scale: 1, tx: 0, ty: 0 });
-  // Mirror the latest transform into a ref so screenToPhoto (called from pointer
-  // handlers, after commit) can read it without being a dependency.
+  // Mirror the latest transform + overlay handlers into refs so the pointer
+  // handlers (set up once) always see current values without re-binding.
   const tRef = useRef(t);
   useEffect(() => {
     tRef.current = t;
   }, [t]);
+  const overlayRef = useRef(overlay);
+  useEffect(() => {
+    overlayRef.current = overlay;
+  }, [overlay]);
   const minScaleRef = useRef(1);
 
-  // Pointer bookkeeping for the active gesture.
   const pointers = useRef(new Map<number, { x: number; y: number }>());
-  const gesture = useRef<{
-    mode: "idle" | "pan" | "pinch";
+  const g = useRef<{
+    mode: "idle" | "pan" | "pinch" | "move" | "resize";
     last: { x: number; y: number };
     lastMid: { x: number; y: number };
     lastDist: number;
-  }>({ mode: "idle", last: { x: 0, y: 0 }, lastMid: { x: 0, y: 0 }, lastDist: 0 });
+    overlayId: string | null;
+    lastPhoto: { x: number; y: number };
+    downScreen: { x: number; y: number };
+    moved: boolean;
+  }>({
+    mode: "idle",
+    last: { x: 0, y: 0 },
+    lastMid: { x: 0, y: 0 },
+    lastDist: 0,
+    overlayId: null,
+    lastPhoto: { x: 0, y: 0 },
+    downScreen: { x: 0, y: 0 },
+    moved: false,
+  });
 
   // Fit the photo into the container and center it (the "zoomed-out" baseline).
   const fit = useCallback(() => {
@@ -86,19 +128,43 @@ export function usePinchZoom(photoW: number, photoH: number) {
     };
   };
 
+  const photoAt = (clientX: number, clientY: number) => {
+    const { x, y } = local({ clientX, clientY });
+    const cur = tRef.current;
+    return { x: (x - cur.tx) / cur.scale, y: (y - cur.ty) / cur.scale };
+  };
+
   const onPointerDown = useCallback((e: ReactPointerEvent) => {
-    (e.target as Element).setPointerCapture?.(e.pointerId);
+    // Capture on the container so we keep getting moves even if the finger
+    // drifts off the element it started on.
+    containerRef.current?.setPointerCapture?.(e.pointerId);
     const p = local(e);
     pointers.current.set(e.pointerId, p);
     const n = pointers.current.size;
-    if (n === 1) {
-      gesture.current.mode = "pan";
-      gesture.current.last = p;
-    } else if (n === 2) {
+    const cur = g.current;
+
+    if (n === 2) {
+      // A second finger always takes over as a stage pinch — even mid-drag.
+      cur.mode = "pinch";
+      cur.overlayId = null;
       const [a, b] = [...pointers.current.values()];
-      gesture.current.mode = "pinch";
-      gesture.current.lastMid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-      gesture.current.lastDist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+      cur.lastMid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      cur.lastDist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+      return;
+    }
+    if (n !== 1) return;
+
+    const hit = overlayRef.current.hitTest?.(e.target) ?? null;
+    cur.moved = false;
+    cur.downScreen = p;
+    if (hit) {
+      cur.mode = hit.kind === "resize" ? "resize" : "move";
+      cur.overlayId = hit.id;
+      cur.lastPhoto = photoAt(e.clientX, e.clientY);
+      overlayRef.current.onSelect?.(hit.id);
+    } else {
+      cur.mode = "pan";
+      cur.last = p;
     }
   }, []);
 
@@ -107,46 +173,67 @@ export function usePinchZoom(photoW: number, photoH: number) {
     const p = local(e);
     pointers.current.set(e.pointerId, p);
     const pts = [...pointers.current.values()];
+    const cur = g.current;
 
-    if (pts.length >= 2) {
+    if (cur.mode === "pinch" && pts.length >= 2) {
       const [a, b] = pts;
       const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
       const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
-      const g = gesture.current;
-      const ratio = dist / (g.lastDist || dist);
-      setT((cur) => {
+      const ratio = dist / (cur.lastDist || dist);
+      setT((s) => {
         const min = minScaleRef.current;
-        const scale = clamp(cur.scale * ratio, min, min * MAX_ZOOM);
-        const real = scale / cur.scale;
-        const tx = mid.x - (mid.x - cur.tx) * real + (mid.x - g.lastMid.x);
-        const ty = mid.y - (mid.y - cur.ty) * real + (mid.y - g.lastMid.y);
+        const scale = clamp(s.scale * ratio, min, min * MAX_ZOOM);
+        const real = scale / s.scale;
+        const tx = mid.x - (mid.x - s.tx) * real + (mid.x - cur.lastMid.x);
+        const ty = mid.y - (mid.y - s.ty) * real + (mid.y - cur.lastMid.y);
         return { scale, tx, ty };
       });
-      g.lastMid = mid;
-      g.lastDist = dist;
-    } else if (gesture.current.mode === "pan") {
-      const last = gesture.current.last;
-      const dx = p.x - last.x;
-      const dy = p.y - last.y;
-      gesture.current.last = p;
-      setT((cur) => ({ ...cur, tx: cur.tx + dx, ty: cur.ty + dy }));
+      cur.lastMid = mid;
+      cur.lastDist = dist;
+      return;
+    }
+
+    if (!cur.moved && Math.hypot(p.x - cur.downScreen.x, p.y - cur.downScreen.y) > TAP_SLOP) {
+      cur.moved = true;
+    }
+
+    if (cur.mode === "pan") {
+      const dx = p.x - cur.last.x;
+      const dy = p.y - cur.last.y;
+      cur.last = p;
+      setT((s) => ({ ...s, tx: s.tx + dx, ty: s.ty + dy }));
+    } else if (cur.mode === "move" && cur.overlayId) {
+      const ph = photoAt(e.clientX, e.clientY);
+      overlayRef.current.onMove?.(cur.overlayId, ph.x - cur.lastPhoto.x, ph.y - cur.lastPhoto.y);
+      cur.lastPhoto = ph;
+    } else if (cur.mode === "resize" && cur.overlayId) {
+      const ph = photoAt(e.clientX, e.clientY);
+      overlayRef.current.onResize?.(cur.overlayId, ph.x, ph.y);
     }
   }, []);
 
   const endPointer = useCallback((e: ReactPointerEvent) => {
+    const cur = g.current;
+    const wasOverlay = cur.mode === "move" || cur.mode === "resize";
+    const overlayId = cur.overlayId;
+    const wasTap = !cur.moved;
     pointers.current.delete(e.pointerId);
     const pts = [...pointers.current.values()];
+
     if (pts.length === 1) {
-      gesture.current.mode = "pan";
-      gesture.current.last = pts[0];
+      // Dropped from a pinch to a single finger — pan with the survivor.
+      cur.mode = "pan";
+      cur.last = pts[0];
+      cur.overlayId = null;
     } else if (pts.length === 0) {
-      gesture.current.mode = "idle";
+      cur.mode = "idle";
+      cur.overlayId = null;
+      if (wasOverlay && wasTap && overlayId) overlayRef.current.onTap?.(overlayId);
     }
   }, []);
 
   // Mouse-wheel zoom (desktop) around the cursor — the desktop equivalent of a
-  // two-finger pinch. The editor is a fixed overlay with nothing to scroll, so
-  // we don't need to preventDefault (which a passive wheel listener can't do).
+  // two-finger pinch. The editor is a fixed overlay with nothing to scroll.
   const onWheel = useCallback((e: ReactWheelEvent) => {
     const p = local(e);
     const factor = Math.exp(-e.deltaY * 0.0015);
@@ -160,14 +247,12 @@ export function usePinchZoom(photoW: number, photoH: number) {
     });
   }, []);
 
-  // Convert a screen point (clientX/Y) to photo-pixel coordinates.
-  const screenToPhoto = useCallback((clientX: number, clientY: number) => {
-    const { x, y } = local({ clientX, clientY });
-    const cur = tRef.current;
-    return { x: (x - cur.tx) / cur.scale, y: (y - cur.ty) / cur.scale };
-  }, []);
+  const screenToPhoto = useCallback(
+    (clientX: number, clientY: number) => photoAt(clientX, clientY),
+    []
+  );
 
-  // Keep the transform from drifting if the photo size changes.
+  // Re-fit if the photo size changes.
   useEffect(() => {
     fit();
   }, [photoW, photoH, fit]);

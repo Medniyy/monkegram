@@ -1,13 +1,14 @@
 "use client";
 
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type PointerEvent as ReactPointerEvent,
-} from "react";
-import { Check, FlipHorizontal2, Plus, RotateCcw, Trash2 } from "lucide-react";
+  Check,
+  FlipHorizontal2,
+  Maximize2,
+  Plus,
+  RotateCcw,
+  Trash2,
+} from "lucide-react";
 import type { NFT } from "@/lib/types";
 import { useAppStore } from "@/store/useAppStore";
 import {
@@ -57,20 +58,75 @@ export function PhotoEditor({
   onRetake,
 }: PhotoEditorProps) {
   const removeBg = useAppStore((s) => s.mask.removeBg);
+
+  const [slots, setSlots] = useState<MonkeSlot[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [pickingForId, setPickingForId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  // Latest slots for the pointer callbacks (which are set up once).
+  const slotsRef = useRef(slots);
+  useEffect(() => {
+    slotsRef.current = slots;
+  }, [slots]);
+
+  const sizeMin = Math.round(Math.min(photo.w, photo.h) * 0.08);
+  const sizeMax = Math.round(Math.max(photo.w, photo.h) * 1.3);
+
+  // A single pointer pipeline drives BOTH the photo pan/zoom and the monke
+  // move/resize, so a two-finger pinch zooms the photo even when fingers land on
+  // a monke (the old per-monke handlers swallowed the 2nd touch). Resize is a
+  // corner-handle drag — fully gesture-driven on mobile (the slider is desktop
+  // -only now).
   const { containerRef, transform, screenToPhoto, bind } = usePinchZoom(
     photo.w,
-    photo.h
+    photo.h,
+    {
+      hitTest: (target) => {
+        const el = target as Element | null;
+        const r = el?.closest?.("[data-resize]");
+        if (r) return { id: r.getAttribute("data-resize")!, kind: "resize" };
+        const m = el?.closest?.("[data-monke]");
+        if (m) return { id: m.getAttribute("data-monke")!, kind: "move" };
+        return null;
+      },
+      onSelect: (id) => setSelectedId(id),
+      onMove: (id, dx, dy) =>
+        setSlots((prev) =>
+          prev.map((s) =>
+            s.id === id ? { ...s, cx: s.cx + dx, cy: s.cy + dy } : s
+          )
+        ),
+      onResize: (id, x, y) =>
+        setSlots((prev) =>
+          prev.map((s) =>
+            s.id === id
+              ? {
+                  ...s,
+                  size: Math.round(
+                    Math.min(
+                      sizeMax,
+                      Math.max(
+                        sizeMin,
+                        2 * Math.max(Math.abs(x - s.cx), Math.abs(y - s.cy))
+                      )
+                    )
+                  ),
+                }
+              : s
+          )
+        ),
+      onTap: (id) => {
+        const slot = slotsRef.current.find((s) => s.id === id);
+        if (slot?.cutout) setSelectedId(id);
+        else setPickingForId(id);
+      },
+    }
   );
 
   const photoUrl = useMemo(
     () => photo.canvas.toDataURL("image/jpeg", 0.92),
     [photo]
   );
-
-  const [slots, setSlots] = useState<MonkeSlot[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [pickingForId, setPickingForId] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
   // Prepare the chosen monke's cutout up-front (it starts pre-placed).
   const { image: initRaw } = useNFTImage(initialNFT?.image);
@@ -102,58 +158,6 @@ export function PhotoEditor({
       prev.map((s) => (s.source === "auto" ? { ...s, cutout: initCutout } : s))
     );
   }, [initCutout]);
-
-  // ---- slot dragging (in photo space, independent of the pinch handler) ----
-  const dragRef = useRef<{
-    id: string;
-    pointerId: number;
-    startX: number;
-    startY: number;
-    origCx: number;
-    origCy: number;
-    moved: boolean;
-  } | null>(null);
-
-  const onSlotDown = (e: ReactPointerEvent, slot: MonkeSlot) => {
-    e.stopPropagation(); // don't let the background pan
-    (e.target as Element).setPointerCapture?.(e.pointerId);
-    const start = screenToPhoto(e.clientX, e.clientY);
-    dragRef.current = {
-      id: slot.id,
-      pointerId: e.pointerId,
-      startX: start.x,
-      startY: start.y,
-      origCx: slot.cx,
-      origCy: slot.cy,
-      moved: false,
-    };
-  };
-
-  const onSlotMove = (e: ReactPointerEvent, slot: MonkeSlot) => {
-    const d = dragRef.current;
-    if (!d || d.id !== slot.id || d.pointerId !== e.pointerId) return;
-    const cur = screenToPhoto(e.clientX, e.clientY);
-    const dx = cur.x - d.startX;
-    const dy = cur.y - d.startY;
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) d.moved = true;
-    setSlots((prev) =>
-      prev.map((s) =>
-        s.id === slot.id ? { ...s, cx: d.origCx + dx, cy: d.origCy + dy } : s
-      )
-    );
-  };
-
-  const onSlotUp = (_e: ReactPointerEvent, slot: MonkeSlot) => {
-    const d = dragRef.current;
-    dragRef.current = null;
-    if (d && !d.moved) {
-      // A tap: open the picker for empty slots, select filled ones.
-      if (slot.cutout) setSelectedId(slot.id);
-      else setPickingForId(slot.id);
-    } else {
-      setSelectedId(slot.id);
-    }
-  };
 
   // ---- toolbar actions ----
   const addManualSlot = () => {
@@ -240,8 +244,6 @@ export function PhotoEditor({
 
   const selected = slots.find((s) => s.id === selectedId) ?? null;
   const placedCount = slots.filter((s) => s.cutout).length;
-  const sizeMin = Math.round(Math.min(photo.w, photo.h) * 0.08);
-  const sizeMax = Math.round(Math.max(photo.w, photo.h) * 1.3);
 
   return (
     <div className="absolute inset-0 z-40 bg-screen flex flex-col">
@@ -275,10 +277,7 @@ export function PhotoEditor({
             return (
               <div
                 key={slot.id}
-                onPointerDown={(e) => onSlotDown(e, slot)}
-                onPointerMove={(e) => onSlotMove(e, slot)}
-                onPointerUp={(e) => onSlotUp(e, slot)}
-                onPointerCancel={() => (dragRef.current = null)}
+                data-monke={slot.id}
                 className="absolute touch-none"
                 style={{
                   left: slot.cx - slot.size / 2,
@@ -296,12 +295,12 @@ export function PhotoEditor({
                     height={slot.size}
                     draggable={false}
                     style={{ transform: slot.flip ? "scaleX(-1)" : undefined }}
-                    className={`w-full h-full object-contain select-none ${
+                    className={`w-full h-full object-contain select-none pointer-events-none ${
                       isSel ? "outline-dashed outline-2 outline-banana" : ""
                     }`}
                   />
                 ) : (
-                  <div className="w-full h-full bg-pixelred/35 border-2 border-pixelred flex items-center justify-center">
+                  <div className="w-full h-full bg-pixelred/35 border-2 border-pixelred flex items-center justify-center pointer-events-none">
                     {/* Counter-scale the badge so it stays readable at any zoom. */}
                     <span
                       className="rounded-full bg-pixelred text-cream p-2"
@@ -313,6 +312,23 @@ export function PhotoEditor({
                     </span>
                   </div>
                 )}
+
+                {/* Corner resize handle (selected monke) — drag to scale. */}
+                {isSel && slot.cutout && (
+                  <span
+                    data-resize={slot.id}
+                    aria-label="Resize monke"
+                    className="absolute right-0 bottom-0 bg-banana text-screen border-2 border-screen rounded-full flex items-center justify-center touch-none"
+                    style={{
+                      width: 30,
+                      height: 30,
+                      transform: `translate(45%, 45%) scale(${1 / transform.scale})`,
+                      transformOrigin: "bottom right",
+                    }}
+                  >
+                    <Maximize2 size={16} strokeWidth={3} />
+                  </span>
+                )}
               </div>
             );
           })}
@@ -321,7 +337,7 @@ export function PhotoEditor({
         {/* Hint */}
         <div className="absolute top-0 inset-x-0 z-10 flex justify-center p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pointer-events-none">
           <span className="font-[family-name:var(--font-display)] text-banana text-[9px] bg-screen/70 px-3 py-2 border-[2px] border-banana/70 backdrop-blur-sm text-center">
-            DRAG TO MOVE · SCROLL/PINCH TO ZOOM · ADD MONKE FOR MORE
+            DRAG TO MOVE · PINCH TO ZOOM · DRAG CORNER TO RESIZE
           </span>
         </div>
       </div>
@@ -330,7 +346,8 @@ export function PhotoEditor({
       <div className="shrink-0 bg-screen/95 border-t-[3px] border-banana p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex flex-col gap-3">
         {/* Per-monke controls when one is selected */}
         {selected && selected.cutout && (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 justify-center md:justify-start">
+            {/* Desktop size slider; on mobile you pinch / drag the corner handle. */}
             <input
               type="range"
               min={sizeMin}
@@ -338,7 +355,7 @@ export function PhotoEditor({
               step={1}
               value={selected.size}
               onChange={(e) => resizeSelected(Number(e.target.value))}
-              className="flex-1"
+              className="flex-1 hidden md:block"
               aria-label="Monke size"
             />
             <button

@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* "Real desktop": wide AND tall. A phone in landscape is wide (≥768px) but
+   short, so plain `md:` treats it as desktop — which shrank the camera into a
+   centered box and parked the controls mid-screen. `desktop:` additionally
+   requires height, so landscape phones keep the full-screen mobile layout. */
+@custom-variant desktop (@media (min-width: 768px) and (min-height: 600px));
+
 /* ------------------------------------------------------------------ */
 /*  MonkeGram design tokens — SMB palette + PS1 / Y2K pixel aesthetic  */
 /* ------------------------------------------------------------------ */
