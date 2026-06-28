@@ -65,10 +65,10 @@ export function createBoostedMicTrack(
 
     const source = ctx.createMediaStreamSource(new MediaStream([micTrack]));
     const gain = ctx.createGain();
-    gain.gain.value = 3; // ~+9.5 dB: lifts a quiet WebView mic to camera level
+    gain.gain.value = 4; // ~+12 dB: lifts a quiet WebView mic to camera loudness
     const limiter = ctx.createDynamicsCompressor();
-    limiter.threshold.value = -2; // catch peaks just below 0 dBFS
-    limiter.knee.value = 4;
+    limiter.threshold.value = -1; // limit only the very top so loudness stays high
+    limiter.knee.value = 2;
     limiter.ratio.value = 20; // near brick-wall, so the boost can't clip
     limiter.attack.value = 0.003;
     limiter.release.value = 0.25;

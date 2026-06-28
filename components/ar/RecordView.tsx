@@ -36,13 +36,10 @@ export function RecordView() {
   const cameraFacing = useAppStore((s) => s.cameraFacing);
   const setCameraFacing = useAppStore((s) => s.setCameraFacing);
 
-  const { videoRef, status: camStatus, retry, audioStatus, audioTrackRef } =
-    useCameraStream();
-  const { landmarkerRef, status: meshStatus } = useFaceMesh();
-  const { image: rawImage, status: imgStatus } = useNFTImage(selectedNFT?.image);
-  const nftImage = useCutoutImage(rawImage, removeBg);
-
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  // Shared between the camera hook (which fills it) and the recorder (which reads
+  // it). Owned here so we can also gate camera/mic acquisition below.
+  const audioTrackRef = useRef<MediaStreamTrack | null>(null);
   const { isRecording, elapsed, result, supported, start, stop, reset } =
     useMediaRecorder(canvasRef, audioTrackRef);
 
@@ -50,6 +47,17 @@ export function RecordView() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [captured, setCaptured] = useState<CapturedPhoto | null>(null);
   const [photoResult, setPhotoResult] = useState<PhotoResult | null>(null);
+
+  // Run the camera/mic only while the live stage is on screen — not while a clip
+  // is previewing or a photo is being edited. Holding the mic open during preview
+  // makes Android duck the playback volume (see useCameraStream).
+  const liveActive = !result && !photoResult && !captured;
+
+  const { videoRef, status: camStatus, retry, audioStatus } =
+    useCameraStream(audioTrackRef, liveActive);
+  const { landmarkerRef, status: meshStatus } = useFaceMesh();
+  const { image: rawImage, status: imgStatus } = useNFTImage(selectedNFT?.image);
+  const nftImage = useCutoutImage(rawImage, removeBg);
 
   // No monkey chosen — send the user to find one.
   if (!selectedNFT) {

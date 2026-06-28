@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { AUDIO_CONSTRAINTS } from "@/lib/audio";
 
@@ -25,14 +31,24 @@ export type AudioStatus = "off" | "granted" | "denied";
  * We now prompt for camera+mic together when the recorder mounts. If the user
  * allows the camera but blocks the mic, the combined request rejects, so we fall
  * back to a video-only stream (camera still works) and report `audioStatus:
- * "denied"` so the UI can surface it. The recorder reuses this audio track.
+ * "denied"` so the UI can surface it. The recorder reuses this audio track (the
+ * caller owns the ref so the recorder and this hook share the same track).
+ *
+ * `active` gates the capture: when false (a recorded clip is previewing, or we're
+ * in the photo editor) we RELEASE the camera + mic. That matters because an open
+ * mic capture makes Android duck in-app media playback — so a clip played back in
+ * the app sounds quieter than the same file from the gallery — and it also keeps
+ * the device out of the "communication" audio path. The stream is re-acquired
+ * automatically when `active` flips back to true.
  */
-export function useCameraStream() {
+export function useCameraStream(
+  audioTrackRef: RefObject<MediaStreamTrack | null>,
+  active: boolean = true
+) {
   const facing = useAppStore((s) => s.cameraFacing);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const audioTrackRef = useRef<MediaStreamTrack | null>(null);
   const [status, setStatus] = useState<CameraStatus>("idle");
   const [audioStatus, setAudioStatus] = useState<AudioStatus>("off");
   const [attempt, setAttempt] = useState(0);
@@ -41,6 +57,16 @@ export function useCameraStream() {
 
   useEffect(() => {
     let cancelled = false;
+
+    // Released state: stop any live tracks and don't acquire. Releasing the mic
+    // here is what restores full in-app playback volume during preview.
+    if (!active) {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      audioTrackRef.current = null;
+      setStatus("idle");
+      return;
+    }
 
     if (
       typeof navigator === "undefined" ||
@@ -112,7 +138,9 @@ export function useCameraStream() {
       streamRef.current = null;
       audioTrackRef.current = null;
     };
-  }, [attempt, facing]);
+    // audioTrackRef is a stable ref from the caller.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attempt, facing, active]);
 
   // The mic toggle just enables/disables the captured track (controls the
   // recording and the OS "mic in use" indicator) — no re-acquisition, so
@@ -122,5 +150,5 @@ export function useCameraStream() {
     if (audioTrackRef.current) audioTrackRef.current.enabled = audioEnabled;
   }, [audioEnabled, status]);
 
-  return { videoRef, status, retry, facing, audioTrackRef, audioStatus };
+  return { videoRef, status, retry, facing, audioStatus };
 }
