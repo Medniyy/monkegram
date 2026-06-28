@@ -29,6 +29,8 @@ export interface OverlayHandlers {
   onMove?: (id: string, dxPhoto: number, dyPhoto: number) => void;
   /** Resize an overlay; (x,y) is the handle's current position in photo px. */
   onResize?: (id: string, xPhoto: number, yPhoto: number) => void;
+  /** Pinch-scale an overlay by a multiplicative factor (two fingers on a monke). */
+  onScale?: (id: string, factor: number) => void;
   /** A tap (down+up without dragging) on an overlay. */
   onTap?: (id: string) => void;
 }
@@ -41,16 +43,18 @@ function clamp(v: number, lo: number, hi: number) {
 }
 
 /**
- * One pointer pipeline for the photo editor: pinch/pan the base photo AND
- * drag/resize the monke overlays, so a two-finger pinch always zooms the stage —
- * even when the fingers land on a monke (the old per-overlay handlers swallowed
- * the second touch, which is why pinch-to-fit didn't work on mobile).
+ * One pointer pipeline for the photo editor: it routes a gesture to EITHER the
+ * monke overlay under the fingers or the base photo, so a two-finger pinch on a
+ * monke resizes that monke while the photo stays put — and a pinch on empty
+ * background reframes the photo. (The old version always zoomed the photo on a
+ * two-finger pinch, even with fingers on a monke, which is what we're fixing.)
  *
- * Routing by pointer count + what the first finger landed on (via `hitTest`):
+ * Routing by pointer count + what the gesture landed on (via `hitTest`):
  *  - 1 finger on a monke body → move it · on its resize handle → resize it
  *  - 1 finger on the background → pan the photo
- *  - 2 fingers anywhere → zoom the photo around their midpoint (overlay drag aborts)
- *  - mouse wheel → zoom (desktop)
+ *  - 2 fingers ON a monke → resize THAT monke via `onScale` (photo frozen)
+ *  - 2 fingers on the background → zoom/reframe the photo around their midpoint
+ *  - mouse wheel → zoom the photo (desktop; touch never reaches this)
  *
  * The transform is applied as `translate(tx,ty) scale(scale)` (origin 0 0) to a
  * wrapper sized to the photo's natural pixels; `screenToPhoto` converts a client
@@ -77,7 +81,7 @@ export function usePinchZoom(
 
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const g = useRef<{
-    mode: "idle" | "pan" | "pinch" | "move" | "resize";
+    mode: "idle" | "pan" | "pinch" | "pinch-monke" | "move" | "resize";
     last: { x: number; y: number };
     lastMid: { x: number; y: number };
     lastDist: number;
@@ -144,12 +148,24 @@ export function usePinchZoom(
     const cur = g.current;
 
     if (n === 2) {
-      // A second finger always takes over as a stage pinch — even mid-drag.
-      cur.mode = "pinch";
-      cur.overlayId = null;
       const [a, b] = [...pointers.current.values()];
       cur.lastMid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
       cur.lastDist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+      // If the gesture is on a monke — the first finger was already holding one,
+      // or the second finger landed on one — the pinch RESIZES that monke and the
+      // photo is frozen. Otherwise the pinch zooms/reframes the photo.
+      const onMonke =
+        cur.mode === "move" || cur.mode === "resize"
+          ? cur.overlayId
+          : overlayRef.current.hitTest?.(e.target)?.id ?? null;
+      if (onMonke) {
+        cur.mode = "pinch-monke";
+        cur.overlayId = onMonke;
+        overlayRef.current.onSelect?.(onMonke);
+      } else {
+        cur.mode = "pinch";
+        cur.overlayId = null;
+      }
       return;
     }
     if (n !== 1) return;
@@ -174,6 +190,17 @@ export function usePinchZoom(
     pointers.current.set(e.pointerId, p);
     const pts = [...pointers.current.values()];
     const cur = g.current;
+
+    if (cur.mode === "pinch-monke" && pts.length >= 2 && cur.overlayId) {
+      // Two fingers on a monke: scale it by the change in finger distance. The
+      // photo transform is left untouched, so it stays exactly where it is.
+      const [a, b] = pts;
+      const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+      const ratio = dist / (cur.lastDist || dist);
+      overlayRef.current.onScale?.(cur.overlayId, ratio);
+      cur.lastDist = dist;
+      return;
+    }
 
     if (cur.mode === "pinch" && pts.length >= 2) {
       const [a, b] = pts;
@@ -221,10 +248,17 @@ export function usePinchZoom(
     const pts = [...pointers.current.values()];
 
     if (pts.length === 1) {
-      // Dropped from a pinch to a single finger — pan with the survivor.
-      cur.mode = "pan";
-      cur.last = pts[0];
-      cur.overlayId = null;
+      if (cur.mode === "pinch-monke") {
+        // Lifted one finger off a monke pinch — go idle so the lone survivor
+        // doesn't suddenly pan the photo or jump the monke. Re-touch to continue.
+        cur.mode = "idle";
+        cur.overlayId = null;
+      } else {
+        // Dropped from a photo pinch to a single finger — pan with the survivor.
+        cur.mode = "pan";
+        cur.last = pts[0];
+        cur.overlayId = null;
+      }
     } else if (pts.length === 0) {
       cur.mode = "idle";
       cur.overlayId = null;

@@ -72,11 +72,10 @@ export function PhotoEditor({
   const sizeMin = Math.round(Math.min(photo.w, photo.h) * 0.08);
   const sizeMax = Math.round(Math.max(photo.w, photo.h) * 1.3);
 
-  // A single pointer pipeline drives BOTH the photo pan/zoom and the monke
-  // move/resize, so a two-finger pinch zooms the photo even when fingers land on
-  // a monke (the old per-monke handlers swallowed the 2nd touch). Resize is a
-  // corner-handle drag — fully gesture-driven on mobile (the slider is desktop
-  // -only now).
+  // A single pointer pipeline routes each gesture to the monke under the fingers
+  // OR the photo: pinch a monke → it resizes (photo frozen); pinch empty space →
+  // the photo reframes; drag a monke → it moves; drag empty space → photo pans.
+  // The corner handle and the slider stay as alternative (mainly desktop) resizes.
   const { containerRef, transform, screenToPhoto, bind } = usePinchZoom(
     photo.w,
     photo.h,
@@ -110,6 +109,19 @@ export function PhotoEditor({
                         2 * Math.max(Math.abs(x - s.cx), Math.abs(y - s.cy))
                       )
                     )
+                  ),
+                }
+              : s
+          )
+        ),
+      onScale: (id, factor) =>
+        setSlots((prev) =>
+          prev.map((s) =>
+            s.id === id
+              ? {
+                  ...s,
+                  size: Math.round(
+                    Math.min(sizeMax, Math.max(sizeMin, s.size * factor))
                   ),
                 }
               : s
@@ -337,7 +349,7 @@ export function PhotoEditor({
         {/* Hint */}
         <div className="absolute top-0 inset-x-0 z-10 flex justify-center p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pointer-events-none">
           <span className="font-[family-name:var(--font-display)] text-banana text-[9px] bg-screen/70 px-3 py-2 border-[2px] border-banana/70 backdrop-blur-sm text-center">
-            DRAG TO MOVE · PINCH TO ZOOM · DRAG CORNER TO RESIZE
+            DRAG MONKE TO MOVE · PINCH MONKE TO RESIZE · PINCH PHOTO TO ZOOM
           </span>
         </div>
       </div>
@@ -346,8 +358,8 @@ export function PhotoEditor({
       <div className="shrink-0 bg-screen/95 border-t-[3px] border-banana p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex flex-col gap-3">
         {/* Per-monke controls when one is selected */}
         {selected && selected.cutout && (
-          <div className="flex items-center gap-3 justify-center md:justify-start">
-            {/* Desktop size slider; on mobile you pinch / drag the corner handle. */}
+          <div className="flex items-center gap-2 justify-center md:justify-start">
+            {/* Desktop size slider; on mobile you pinch the monke (or its corner). */}
             <input
               type="range"
               min={sizeMin}
@@ -358,12 +370,13 @@ export function PhotoEditor({
               className="flex-1 hidden md:block"
               aria-label="Monke size"
             />
+            {/* Uniform-height per-monke controls. */}
             <button
               onClick={flipSelected}
               aria-label="Flip monke"
               aria-pressed={selected.flip}
               title="Flip monke"
-              className={`border-[2px] p-2 active:scale-95 ${
+              className={`h-10 min-w-10 px-3 flex items-center justify-center border-[2px] active:scale-95 ${
                 selected.flip
                   ? "border-banana text-banana"
                   : "border-cream/40 text-cream/80"
@@ -373,14 +386,15 @@ export function PhotoEditor({
             </button>
             <button
               onClick={() => setPickingForId(selected.id)}
-              className="font-[family-name:var(--font-display)] text-[9px] text-cream/80 border-[2px] border-cream/40 px-2 py-2 active:scale-95"
+              title="Change monke"
+              className="h-10 min-w-10 px-3 flex items-center justify-center font-[family-name:var(--font-display)] text-[10px] text-cream/80 border-[2px] border-cream/40 active:scale-95"
             >
               #{selected.nft?.id ?? "?"}
             </button>
             <button
               onClick={() => removeSlot(selected.id)}
               aria-label="Remove monke"
-              className="text-pixelred border-[2px] border-pixelred/60 p-2 active:scale-95"
+              className="h-10 min-w-10 px-3 flex items-center justify-center text-pixelred border-[2px] border-pixelred/60 active:scale-95"
             >
               <Trash2 size={16} strokeWidth={2.5} />
             </button>
@@ -407,12 +421,12 @@ export function PhotoEditor({
             ADD MONKE
           </PixelButton>
           <PixelButton
-            size="md"
+            size="sm"
             onClick={confirm}
             disabled={placedCount === 0 || busy}
             className="flex-1 flex items-center justify-center gap-2"
           >
-            <Check size={16} strokeWidth={3} />
+            <Check size={14} strokeWidth={3} />
             {busy ? "SAVING…" : "CONFIRM"}
           </PixelButton>
         </div>
