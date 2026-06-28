@@ -1,0 +1,4 @@
+:HL["/monkegram/_next/static/chunks/1w26zq7oikzzg.css","style"]
+:HL["/monkegram/_next/static/media/PressStart2P_Regular-s.p.035jxxzsfegfo.ttf","font",{"crossOrigin":"","type":"font/ttf"}]
+:HL["/monkegram/_next/static/media/VT323_Regular-s.p.20moi3xvn4ca_.ttf","font",{"crossOrigin":"","type":"font/ttf"}]
+0:{"tree":{"name":"","param":null,"prefetchHints":16,"slots":{"children":{"name":"record","param":null,"prefetchHints":0,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":0,"slots":null}}}}},"staleTime":300,"buildId":"ShtKDEV4LmTC12nTOYLFg"}
