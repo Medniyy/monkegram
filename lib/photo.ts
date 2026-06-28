@@ -49,6 +49,72 @@ export function captureFrame(
   return { canvas, w, h };
 }
 
+/** Longest edge for an uploaded base photo — caps huge phone shots so the editor
+ *  canvas stays light. */
+const UPLOAD_LONG_EDGE = 1920;
+
+/**
+ * Build an editor base photo from a user-chosen image file — decoded entirely in
+ * the browser (nothing is uploaded or stored). Honours EXIF orientation via
+ * createImageBitmap, downscales very large images, and falls back to an <img>
+ * decode where createImageBitmap's orientation option isn't supported. Returns
+ * null for a non-image or an undecodable file.
+ */
+export async function photoFromFile(file: File): Promise<CapturedPhoto | null> {
+  if (!file.type.startsWith("image/")) return null;
+
+  let src: CanvasImageSource | null = null;
+  let iw = 0;
+  let ih = 0;
+  let cleanup: (() => void) | null = null;
+
+  try {
+    const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
+    src = bmp;
+    iw = bmp.width;
+    ih = bmp.height;
+    cleanup = () => bmp.close();
+  } catch {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = () => reject(new Error("decode failed"));
+        el.src = url;
+      });
+      src = img;
+      iw = img.naturalWidth;
+      ih = img.naturalHeight;
+    } catch {
+      URL.revokeObjectURL(url);
+      return null;
+    }
+    cleanup = () => URL.revokeObjectURL(url);
+  }
+
+  if (!src || !iw || !ih) {
+    cleanup?.();
+    return null;
+  }
+
+  const scale = Math.min(1, UPLOAD_LONG_EDGE / Math.max(iw, ih));
+  const w = Math.max(1, Math.round(iw * scale));
+  const h = Math.max(1, Math.round(ih * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    cleanup?.();
+    return null;
+  }
+  ctx.drawImage(src, 0, 0, w, h);
+  cleanup?.();
+  return { canvas, w, h };
+}
+
 /** The editor viewport (CSS px) and its current pan/zoom — the exact frame the
  *  user sees, so export is what-you-see-is-what-you-get. */
 export interface ViewFrame {

@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   ArrowLeft,
   CameraOff,
+  ImagePlus,
   MicOff,
   Search,
   Settings,
@@ -25,7 +26,12 @@ import { DownloadButton } from "@/components/recorder/DownloadButton";
 import { PixelButton } from "@/components/ui/PixelButton";
 import { BlinkingCursor } from "@/components/ui/BlinkingCursor";
 import { PhotoEditor } from "@/components/photo/PhotoEditor";
-import { captureFrame, type CapturedPhoto, type PhotoResult } from "@/lib/photo";
+import {
+  captureFrame,
+  photoFromFile,
+  type CapturedPhoto,
+  type PhotoResult,
+} from "@/lib/photo";
 
 export function RecordView() {
   const selectedNFT = useAppStore((s) => s.selectedNFT);
@@ -37,6 +43,7 @@ export function RecordView() {
   const setCameraFacing = useAppStore((s) => s.setCameraFacing);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   // Shared between the camera hook (which fills it) and the recorder (which reads
   // it). Owned here so we can also gate camera/mic acquisition below.
   const audioTrackRef = useRef<MediaStreamTrack | null>(null);
@@ -99,6 +106,19 @@ export function RecordView() {
     if (!video) return;
     const shot = captureFrame(video, flip);
     if (shot) setCaptured(shot);
+  };
+
+  // Use your own picture as the base instead of the camera — decoded fully in the
+  // browser (nothing is uploaded or stored), then placed straight into the editor.
+  const onUploadPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // let the same file be picked again later
+    if (!file) return;
+    const shot = await photoFromFile(file);
+    if (shot) {
+      setCaptureMode("photo");
+      setCaptured(shot);
+    }
   };
 
   const retakePhoto = () => {
@@ -249,10 +269,30 @@ export function RecordView() {
             )}
 
             {isPhoto ? (
-              <PhotoShutter
-                onClick={takePhoto}
-                disabled={camStatus !== "ready"}
-              />
+              <div className="flex items-center gap-6">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={onUploadPhoto}
+                />
+                {/* Upload your own picture to put monkes on (decoded in-browser). */}
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  aria-label="Upload a photo"
+                  title="Upload a photo"
+                  className="w-11 h-11 rounded-full border-[2px] border-cream/40 bg-screen/55 text-cream flex items-center justify-center backdrop-blur-sm active:scale-95"
+                >
+                  <ImagePlus size={20} strokeWidth={2.5} />
+                </button>
+                <PhotoShutter
+                  onClick={takePhoto}
+                  disabled={camStatus !== "ready"}
+                />
+                {/* Balances the upload button so the shutter stays centered. */}
+                <span className="w-11" aria-hidden />
+              </div>
             ) : (
               <RecordButton
                 isRecording={isRecording}
